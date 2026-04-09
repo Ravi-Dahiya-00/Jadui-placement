@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException, UploadFile
 
-from backend.app.core.supabase_client import get_supabase_admin_client
+from app.core.supabase_client import get_supabase_admin_client
 from .analyzer import analyzer
 from .parser import parser
 from .utils import (

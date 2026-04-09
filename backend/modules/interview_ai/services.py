@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from backend.app.core.supabase_client import get_supabase_admin_client
+from app.core.supabase_client import get_supabase_admin_client
 from .prompts import answer_evaluation_prompt, question_generation_prompt
 from .utils import (
     AnswerEvaluation,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException
 
-from backend.app.core.supabase_client import get_supabase_admin_client
+from app.core.supabase_client import get_supabase_admin_client
 
 DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
