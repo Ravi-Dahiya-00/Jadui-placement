@@ -123,6 +123,22 @@ export default function DashboardPage() {
     const taskCompletion = todayTasks.length ? Math.round((completedToday / todayTasks.length) * 100) : 0
     const readiness = state.progress.readinessScore || Math.round((avgResume * 0.45) + (avgInterview * 0.4) + (taskCompletion * 0.15))
     
+    const skillBucket = {}
+    resumeHistory.forEach((row) => {
+      ;(row.skills || []).forEach((skill) => {
+        const key = String(skill || '').trim()
+        if (!key) return
+        skillBucket[key] = (skillBucket[key] || 0) + 1
+      })
+    })
+    const skillData = Object.entries(skillBucket)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([name, count]) => ({
+        name,
+        level: Math.min(95, 40 + count * 15),
+      }))
+
     return {
       readiness,
       taskCompletion,
