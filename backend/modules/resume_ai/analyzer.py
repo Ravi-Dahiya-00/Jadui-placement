@@ -8,7 +8,15 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from .prompts import resume_cleanup_prompt, semantic_resume_analysis_prompt
+from .prompts import (
+    experience_review_prompt,
+    leadership_review_prompt,
+    personal_summary_review_prompt,
+    projects_review_prompt,
+    resume_cleanup_prompt,
+    semantic_resume_analysis_prompt,
+    technical_skills_review_prompt,
+)
 from .utils import normalize_space, safe_json_from_text
 
 
@@ -42,6 +50,29 @@ COMMON_SKILLS = {
 
 
 class ResumeAnalyzer:
+    def _extract_section(self, text: str, heading_patterns: list[str]) -> str:
+        lines = text.splitlines()
+        if not lines:
+            return ""
+        starts: list[int] = []
+        for idx, line in enumerate(lines):
+            low = line.strip().lower()
+            if any(re.search(pat, low) for pat in heading_patterns):
+                starts.append(idx)
+        if not starts:
+            return ""
+        start = starts[0] + 1
+        end = len(lines)
+        heading_any = re.compile(
+            r"^\s*(summary|professional summary|skills|technical skills|experience|work experience|projects|project|leadership|achievements|education|certifications?)\s*:?\s*$",
+            re.IGNORECASE,
+        )
+        for idx in range(start, len(lines)):
+            if heading_any.search(lines[idx].strip()):
+                end = idx
+                break
+        return normalize_space("\n".join(lines[start:end]).strip())
+
     def extract_skills(self, text: str) -> list[str]:
         norm = text.lower()
         found = [s for s in COMMON_SKILLS if s in norm]
@@ -107,6 +138,37 @@ class ResumeAnalyzer:
     def _llm_semantic_analysis(self, resume_text: str, role_target: str, target_skills: list[str]) -> dict[str, Any]:
         prompt = semantic_resume_analysis_prompt(resume_text, role_target, target_skills)
         return self._llm_json(prompt)
+
+    def _llm_section_reviews(self, resume_text: str) -> list[dict[str, Any]]:
+        personal_summary = self._extract_section(
+            resume_text,
+            [r"^personal details", r"^contact", r"^professional summary", r"^summary"],
+        )
+        technical_skills = self._extract_section(resume_text, [r"^technical skills", r"^skills"])
+        experience = self._extract_section(resume_text, [r"^experience", r"^work experience"])
+        projects = self._extract_section(resume_text, [r"^projects", r"^project"])
+        leadership = self._extract_section(
+            resume_text,
+            [r"^leadership", r"^achievements", r"^leadership\s*&\s*achievements"],
+        )
+
+        prompts: list[tuple[str, str]] = [
+            ("personal_summary", personal_summary_review_prompt(personal_summary or resume_text[:2000])),
+            ("technical_skills", technical_skills_review_prompt(technical_skills or resume_text[:2000])),
+            ("experience", experience_review_prompt(experience or resume_text[:2500])),
+            ("projects", projects_review_prompt(projects or resume_text[:2500])),
+            ("leadership_achievements", leadership_review_prompt(leadership or resume_text[:1500])),
+        ]
+
+        reviews: list[dict[str, Any]] = []
+        for _, prompt in prompts:
+            try:
+                data = self._llm_json(prompt)
+                if isinstance(data, dict):
+                    reviews.append(data)
+            except Exception:
+                continue
+        return reviews
 
     def analyze(
         self,
@@ -178,15 +240,55 @@ class ResumeAnalyzer:
 
         try:
             semantic = self._llm_semantic_analysis(cleaned_for_analysis[:12000], role_target, target_skills)
+            section_reviews = self._llm_section_reviews(cleaned_for_analysis[:12000])
+
+            issues: list[str] = []
+            tips: list[str] = []
+            inferred_roles: list[str] = []
+            section_skills: list[str] = []
+            bs_factors: list[int] = []
+            for review in section_reviews:
+                issues.extend([str(i) for i in (review.get("issues") or []) if str(i).strip()])
+                tips.extend([str(i) for i in (review.get("tips") or []) if str(i).strip()])
+                section_skills.extend([str(i).strip().lower() for i in (review.get("extracted_skills") or []) if str(i).strip()])
+                role = str(review.get("inferred_role", "")).strip()
+                if role:
+                    inferred_roles.append(role)
+                try:
+                    bs = int(review.get("bs_factor", 0))
+                    if 1 <= bs <= 10:
+                        bs_factors.append(bs)
+                except Exception:
+                    pass
+
+            merged_skills = sorted(set(skills + section_skills))
+            merged_gap = self.compute_skill_gap(merged_skills, target_skills)
+            avg_bs = (sum(bs_factors) / len(bs_factors)) if bs_factors else 5.0
+            issue_penalty = min(len(issues), 12) * 2
+            gap_penalty = min(len(merged_gap), 10) * 5
+            bs_penalty = int(avg_bs * 4)
+            computed_score = max(35, min(95, 100 - issue_penalty - gap_penalty - bs_penalty))
+
+            llm_score_raw = semantic.get("score", computed_score)
+            try:
+                llm_score = int(llm_score_raw)
+            except Exception:
+                llm_score = computed_score
+            final_score = max(35, min(95, int((computed_score * 0.6) + (llm_score * 0.4))))
+
             return {
-                "skills": skills,
+                "skills": merged_skills,
                 "projects": projects,
                 "experience_level": semantic.get("experience_level", deterministic["experience_level"]),
                 "strengths": semantic.get("strengths", deterministic["strengths"])[:3],
-                "weaknesses": semantic.get("weaknesses", deterministic["weaknesses"])[:3],
-                "recommended_roles": semantic.get("recommended_roles", deterministic["recommended_roles"])[:5],
-                "skill_gap": semantic.get("skill_gap", deterministic["skill_gap"])[:10],
-                "score": int(semantic.get("score", deterministic["score"])),
+                "weaknesses": (semantic.get("weaknesses", []) or issues or deterministic["weaknesses"])[:5],
+                "recommended_roles": (
+                    semantic.get("recommended_roles", [])
+                    or inferred_roles
+                    or deterministic["recommended_roles"]
+                )[:5],
+                "skill_gap": (semantic.get("skill_gap", []) or merged_gap)[:10],
+                "score": final_score,
             }
         except Exception:
             return deterministic
