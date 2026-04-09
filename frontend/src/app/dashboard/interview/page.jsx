@@ -5,8 +5,6 @@ import { Mic, Play, Loader2, PhoneOff, User, Bot, Sparkles } from 'lucide-react'
 import RoleSelector  from '@/features/interview/RoleSelector'
 import FeedbackPanel from '@/features/interview/FeedbackPanel'
 import InterviewCard from '@/features/interview/InterviewCard'
-import { interviewAPI } from '@/services/api'
-import { getVapi } from '@/lib/vapi'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/context/AppContext'
 
@@ -21,47 +19,27 @@ export default function InterviewPage() {
   const [feedback,    setFeedback]  = useState(null)
   const [loading,     setLoading]   = useState(false)
   const [startError,  setStartError] = useState('')
+  const [browserSpeechSupported, setBrowserSpeechSupported] = useState(true)
 
-  // Vapi Voice Call State
+  // Browser speech recognition state (free alternative to Vapi)
   const [callStatus, setCallStatus] = useState('INACTIVE') // INACTIVE, CONNECTING, ACTIVE, FINISHED
   const [messages, setMessages] = useState([])
   const [isSpeaking, setIsSpeaking] = useState(false)
   const transcriptRef = useRef(null)
+  const recognitionRef = useRef(null)
+  const shouldKeepListeningRef = useRef(false)
 
   useEffect(() => {
-    // Only bind listeners when we enter the interview stage
-    if (stage !== STAGES.interview) return
-
-    const vapi = getVapi()
-    if (!vapi) return
-
-    const handleCallStart = () => { setCallStatus('ACTIVE'); setLoading(false) }
-    const handleCallEnd = () => setTimeout(() => setCallStatus('FINISHED'), 500)
-    const handleMessage = (msg) => {
-      if (msg.type === 'transcript' && msg.transcriptType === 'final') {
-        setMessages((prev) => [...prev, { role: msg.role, content: msg.transcript }])
+    if (typeof window === 'undefined') return
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    setBrowserSpeechSupported(Boolean(SpeechRecognition))
+    return () => {
+      shouldKeepListeningRef.current = false
+      if (recognitionRef.current) {
+        recognitionRef.current.stop()
       }
     }
-    const handleSpeechStart = () => setIsSpeaking(true)
-    const handleSpeechEnd = () => setIsSpeaking(false)
-    const handleError = (err) => { console.error('Vapi error:', err); setLoading(false) }
-
-    vapi.on('call-start', handleCallStart)
-    vapi.on('call-end', handleCallEnd)
-    vapi.on('message', handleMessage)
-    vapi.on('speech-start', handleSpeechStart)
-    vapi.on('speech-end', handleSpeechEnd)
-    vapi.on('error', handleError)
-
-    return () => {
-      vapi.off('call-start', handleCallStart)
-      vapi.off('call-end', handleCallEnd)
-      vapi.off('message', handleMessage)
-      vapi.off('speech-start', handleSpeechStart)
-      vapi.off('speech-end', handleSpeechEnd)
-      vapi.off('error', handleError)
-    }
-  }, [stage])
+  }, [])
 
   // Scroll to bottom of transcript automatically
   useEffect(() => {
@@ -99,20 +77,53 @@ export default function InterviewPage() {
       }
 
       setQuestions(generatedQuestions)
-
-      // Start VAPI voice session
-      const vapi = getVapi()
-      const assistantId = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID
-      if (!assistantId) {
-        throw new Error('Voice interview is not configured. Missing NEXT_PUBLIC_VAPI_ASSISTANT_ID.')
-      }
-      await vapi.start(assistantId, {
-        variableValues: {
-          username: state.user?.user_metadata?.full_name || 'Candidate',
-          userid: state.user?.id || 'demo-user',
-          questions: JSON.stringify(generatedQuestions)
+      setMessages([
+        {
+          role: 'bot',
+          content: `Interview started for ${role}. Speak your answer clearly. First question: ${generatedQuestions[0] || 'Please introduce yourself and your recent work.'}`
         }
-      })
+      ])
+
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+      if (!SpeechRecognition) {
+        throw new Error('Browser Speech Recognition is not supported in this browser. Use latest Chrome or Edge.')
+      }
+
+      const recognition = new SpeechRecognition()
+      recognition.continuous = true
+      recognition.interimResults = false
+      recognition.lang = 'en-US'
+      shouldKeepListeningRef.current = true
+
+      recognition.onstart = () => {
+        setCallStatus('ACTIVE')
+        setLoading(false)
+      }
+      recognition.onresult = (event) => {
+        const text = event.results[event.resultIndex]?.[0]?.transcript?.trim()
+        if (text) {
+          setMessages((prev) => [...prev, { role: 'user', content: text }])
+        }
+      }
+      recognition.onspeechstart = () => setIsSpeaking(true)
+      recognition.onspeechend = () => setIsSpeaking(false)
+      recognition.onerror = (event) => {
+        if (event?.error === 'no-speech') return
+        console.error('Speech recognition error:', event)
+        setStartError('Microphone error while listening. Please check mic permission and try again.')
+      }
+      recognition.onend = () => {
+        if (shouldKeepListeningRef.current) {
+          try {
+            recognition.start()
+          } catch {
+            // Ignore duplicate start races.
+          }
+        }
+      }
+
+      recognitionRef.current = recognition
+      recognition.start()
     } catch (err) {
       console.error('Failed to start interview:', err)
       setStartError(err?.message || 'Failed to start voice interview. Please try again.')
@@ -122,8 +133,10 @@ export default function InterviewPage() {
   }
 
   const handleDisconnect = async () => {
-    const vapi = getVapi()
-    vapi.stop()
+    shouldKeepListeningRef.current = false
+    if (recognitionRef.current) {
+      recognitionRef.current.stop()
+    }
     setCallStatus('FINISHED')
     setLoading(true)
 
@@ -177,6 +190,10 @@ export default function InterviewPage() {
   }
 
   const handleRestart = () => {
+    shouldKeepListeningRef.current = false
+    if (recognitionRef.current) {
+      recognitionRef.current.stop()
+    }
     setStage(STAGES.select)
     setRole('')
     setQuestions([])
@@ -195,10 +212,15 @@ export default function InterviewPage() {
           Live Mock Interview
         </h1>
         <p className="text-muted text-sm mt-1">
-          Practice role-specific interviews with a real-time Voice AI agent.
+          Practice role-specific interviews with free browser speech recognition.
         </p>
         {startError ? (
           <p className="text-error text-sm mt-2">{startError}</p>
+        ) : null}
+        {!browserSpeechSupported ? (
+          <p className="text-warning text-xs mt-1">
+            Voice capture needs Web Speech API support (recommended: latest Chrome/Edge).
+          </p>
         ) : null}
       </div>
 
@@ -213,7 +235,7 @@ export default function InterviewPage() {
             className="btn-primary w-full py-4 justify-center text-base disabled:opacity-50"
           >
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
-            {loading ? 'Initializing Agent Ecosystem...' : 'Start Voice Interview'}
+            {loading ? 'Initializing Browser Speech...' : 'Start Voice Interview'}
           </button>
 
           {/* Past Interviews History Ported from PulseAI */}
@@ -269,7 +291,7 @@ export default function InterviewPage() {
               <div className="text-center space-y-1">
                 <h3 className="text-xl font-bold text-white">Agentic Coach</h3>
                 <p className={cn("text-sm font-medium", callStatus === 'ACTIVE' ? "text-success" : "text-warning animate-pulse")}>
-                  {callStatus === 'CONNECTING' ? 'Connecting to Voice Server...' : 'Live Interview Active'}
+                  {callStatus === 'CONNECTING' ? 'Connecting to Microphone...' : 'Live Interview Active'}
                 </p>
               </div>
             </div>
