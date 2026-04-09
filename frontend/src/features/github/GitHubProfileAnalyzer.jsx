@@ -85,6 +85,7 @@ export default function GitHubProfileAnalyzer() {
   const [username, setUsername] = useState('')
   const [withAi, setWithAi] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [data, setData] = useState(null)
   const [isMounted, setIsMounted] = useState(false)
   const [activeTab, setActiveTab] = useState('overview') // overview | languages | repos
