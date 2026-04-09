@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
 from .services import admin_service
 from .assistant import assistant_service
 from .workshops import workshop_service

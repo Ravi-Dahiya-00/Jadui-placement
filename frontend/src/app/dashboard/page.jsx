@@ -121,24 +121,8 @@ export default function DashboardPage() {
         ? Math.round(interviewHistory.reduce((sum, item) => sum + Number(item.overall_score || 0), 0) / interviewHistory.length)
         : 0
     const taskCompletion = todayTasks.length ? Math.round((completedToday / todayTasks.length) * 100) : 0
-    const readiness = Math.round((avgResume * 0.45) + (avgInterview * 0.4) + (taskCompletion * 0.15))
-
-    const skillBucket = {}
-    resumeHistory.forEach((row) => {
-      ;(row.skills || []).forEach((skill) => {
-        const key = String(skill || '').trim()
-        if (!key) return
-        skillBucket[key] = (skillBucket[key] || 0) + 1
-      })
-    })
-    const skillData = Object.entries(skillBucket)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 6)
-      .map(([name, count]) => ({
-        name,
-        level: Math.min(95, 40 + count * 15),
-      }))
-
+    const readiness = state.progress.readinessScore || Math.round((avgResume * 0.45) + (avgInterview * 0.4) + (taskCompletion * 0.15))
+    
     return {
       readiness,
       taskCompletion,
@@ -149,7 +133,7 @@ export default function DashboardPage() {
       totalResumes: resumeHistory.length,
       totalInterviews: interviewHistory.length,
     }
-  }, [resumeHistory, interviewHistory, todayTasks.length, completedToday])
+  }, [resumeHistory, interviewHistory, todayTasks.length, completedToday, state.progress.readinessScore])
 
   const readinessBand = useMemo(() => {
     if (derived.readiness >= 75) return { label: 'On Track', tone: 'text-success', note: 'Keep consistency and start harder mocks.' }
@@ -217,7 +201,7 @@ export default function DashboardPage() {
 
   const weakestTwoSkills = useMemo(() => {
     if (skillGaps?.length) return skillGaps.slice(0, 2)
-    return derived.skillData
+    return (derived.skillData || [])
       .slice()
       .sort((a, b) => a.level - b.level)
       .slice(0, 2)
@@ -227,7 +211,7 @@ export default function DashboardPage() {
   const readinessTrend = useMemo(() => {
     const points = Array.from({ length: 7 }, (_, i) => ({
       day: i + 1,
-      value: Math.max(0, Math.min(100, derived.readiness - (6 - i) * 4 + (i % 2 === 0 ? 2 : -1))),
+      value: Math.max(0, Math.min(100, (derived.readiness || 0) - (6 - i) * 4 + (i % 2 === 0 ? 2 : -1))),
     }))
     return points
   }, [derived.readiness])
@@ -242,10 +226,10 @@ export default function DashboardPage() {
         const d = await res.json()
         if (res.ok) {
           setReadinessData([
-            { subject: 'Resume', A: d.resume, fullMark: 100 },
-            { subject: 'Technical', A: d.technical, fullMark: 100 },
-            { subject: 'Interview', A: d.interview, fullMark: 100 },
-            { subject: 'Consistency', A: d.consistency, fullMark: 100 },
+            { subject: 'Resume', A: d.resume, value: d.resume, fullMark: 100 },
+            { subject: 'Technical', A: d.technical, value: d.technical, fullMark: 100 },
+            { subject: 'Interview', A: d.interview, value: d.interview, fullMark: 100 },
+            { subject: 'Consistency', A: d.consistency, value: d.consistency, fullMark: 100 },
           ])
         }
         
@@ -262,7 +246,7 @@ export default function DashboardPage() {
   }, [state.user?.id, state.chatContext?.githubUsername, resumeHistory.length, interviewHistory.length])
 
   const sparklinePath = useMemo(() => {
-    if (!readinessTrend.length) return ''
+    if (!readinessTrend || readinessTrend.length < 2) return 'M 0 50 L 100 50'
     const max = Math.max(...readinessTrend.map((p) => p.value), 1)
     const min = Math.min(...readinessTrend.map((p) => p.value), 0)
     const range = Math.max(1, max - min)

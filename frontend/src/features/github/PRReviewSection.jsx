@@ -32,7 +32,7 @@ export default function PRReviewSection() {
 
   const handleReview = async (e) => {
     e.preventDefault()
-    if (!repoUrl || !prNumber) return
+    if (!repoUrl || !prNumber || !state.user?.id) return
     
     setLoading(true)
     setError('')
