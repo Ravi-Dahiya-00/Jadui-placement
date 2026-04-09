@@ -273,7 +273,6 @@ export default function DashboardPage() {
       .join(' ')
   }, [readinessTrend])
 
-  const [goalSaved, setGoalSaved] = useState(false)
   const [syncingBooster, setSyncingBooster] = useState(null)
 
   const handleApplyBooster = async (boosterText, index) => {
