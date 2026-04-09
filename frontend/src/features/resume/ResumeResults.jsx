@@ -4,7 +4,14 @@ import { Badge, ProgressBar } from '@/components/ui'
 export default function ResumeResults({ data }) {
   if (!data) return null
 
-  const { skills = [], weaknesses = [], recommendations = [], score = 0, domain = '' } = data
+  const {
+    skills = [],
+    weaknesses = [],
+    recommendations = [],
+    score = 0,
+    domain = '',
+    sectionReviews = [],
+  } = data
 
   return (
     <div className="space-y-6 animate-slide-up">
@@ -80,6 +87,68 @@ export default function ResumeResults({ data }) {
           ))}
         </ol>
       </div>
+
+      {/* Section-wise AI review */}
+      {sectionReviews.length > 0 && (
+        <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center">
+              <Target className="w-4 h-4 text-primary" />
+            </div>
+            <h4 className="font-semibold text-white">Section-wise AI Resume Review</h4>
+          </div>
+
+          {sectionReviews.map((review, idx) => {
+            const title = String(review.section || `section-${idx + 1}`)
+              .replace(/_/g, ' ')
+              .replace(/\b\w/g, (c) => c.toUpperCase())
+            const issues = Array.isArray(review.issues) ? review.issues : []
+            const tips = Array.isArray(review.tips) ? review.tips : []
+            const improved = String(review.improved_block || '').trim()
+            const bsFactor = Number(review.bs_factor || 0)
+
+            return (
+              <div key={`${title}-${idx}`} className="rounded-lg border border-border p-4 bg-surface/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h5 className="text-sm font-semibold text-white">{title}</h5>
+                  {bsFactor > 0 ? (
+                    <span className="text-xs text-warning">BS factor: {bsFactor}/10</span>
+                  ) : null}
+                </div>
+
+                {issues.length > 0 && (
+                  <div>
+                    <p className="text-xs text-muted mb-1">Brutal assessment</p>
+                    <ul className="space-y-1">
+                      {issues.slice(0, 5).map((issue, issueIdx) => (
+                        <li key={issueIdx} className="text-sm text-muted">- {issue}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {improved && (
+                  <div>
+                    <p className="text-xs text-muted mb-1">Improved version</p>
+                    <p className="text-sm text-white whitespace-pre-wrap leading-relaxed">{improved}</p>
+                  </div>
+                )}
+
+                {tips.length > 0 && (
+                  <div>
+                    <p className="text-xs text-muted mb-1">Final tips</p>
+                    <ul className="space-y-1">
+                      {tips.slice(0, 3).map((tip, tipIdx) => (
+                        <li key={tipIdx} className="text-sm text-muted">- {tip}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

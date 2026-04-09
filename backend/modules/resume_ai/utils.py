@@ -67,6 +67,7 @@ class ResumeAnalysisRecord:
     recommended_roles: list[str]
     skill_gap: list[str]
     score: int
+    section_reviews: list[dict[str, Any]] = field(default_factory=list)
     created_at: str = field(default_factory=utc_now_iso)
 
 

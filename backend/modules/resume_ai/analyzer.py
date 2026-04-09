@@ -233,6 +233,7 @@ class ResumeAnalyzer:
             "recommended_roles": [role_target] if role_target else ["Software Engineer"],
             "skill_gap": gap,
             "score": max(0, min(100, 100 - (len(gap) * 10))),
+            "section_reviews": [],
         }
 
         if not use_llm:
@@ -289,6 +290,7 @@ class ResumeAnalyzer:
                 )[:5],
                 "skill_gap": (semantic.get("skill_gap", []) or merged_gap)[:10],
                 "score": final_score,
+                "section_reviews": section_reviews[:5],
             }
         except Exception:
             return deterministic

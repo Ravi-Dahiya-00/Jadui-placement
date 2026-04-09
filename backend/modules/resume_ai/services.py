@@ -86,6 +86,7 @@ class ResumeAIService:
             recommended_roles=analysis["recommended_roles"],
             skill_gap=analysis["skill_gap"],
             score=analysis["score"],
+            section_reviews=analysis.get("section_reviews") or [],
         )
         get_supabase_admin_client().table("resume_results").insert(
             {
@@ -117,6 +118,19 @@ class ResumeAIService:
         if not rows:
             raise HTTPException(status_code=404, detail="result not found")
         row = rows[0]
+        section_reviews: list[dict] = []
+        try:
+            file_row = self._get_file_row(row.get("file_id", ""))
+            regenerated = analyzer.analyze(
+                resume_text=file_row.get("parsed_text", ""),
+                role_target=row.get("role_target", ""),
+                target_skills=row.get("skill_gap") or [],
+                use_llm=True,
+            )
+            section_reviews = regenerated.get("section_reviews") or []
+        except Exception:
+            section_reviews = []
+
         return ResumeAnalysisRecord(
             result_id=row["id"],
             file_id=row["file_id"],
@@ -129,6 +143,7 @@ class ResumeAIService:
             recommended_roles=row.get("recommended_roles") or [],
             skill_gap=row.get("skill_gap") or [],
             score=int(row.get("score", 0)),
+            section_reviews=section_reviews,
             created_at=row.get("created_at", ""),
         )
 

@@ -66,6 +66,7 @@ export async function POST(req) {
       weaknesses: analysis.weaknesses || [],
       recommendations: analysis.recommended_roles || [],
       domain: analysis.experience_level || 'unknown',
+      sectionReviews: analysis.section_reviews || [],
     }, { status: 200 });
 
   } catch (error) {
