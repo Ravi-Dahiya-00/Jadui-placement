@@ -39,13 +39,19 @@ export async function signOut() {
   await supabase.auth.signOut()
 }
 
-/**
- * Get the currently authenticated user.
- */
 export async function getCurrentUser() {
   if (!supabase) return mockUser
   const { data: { user } } = await supabase.auth.getUser()
-  return user
+  if (!user) return null
+  
+  // Also fetch role from profiles
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+    
+  return { ...user, role: profile?.role || 'student' }
 }
 
 // ─── Demo / mock auth for development without Supabase ───────────────────────

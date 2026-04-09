@@ -1,70 +1,26 @@
-"""
-Cross-module Synchronization Bridge.
-Connects Resume, GitHub, and Interview modules to the System State.
-"""
+"""User Sync Service: Ensures profiles and roles are consistent across the system."""
 
 from __future__ import annotations
-from .services import service as system_service
+from app.core.supabase_client import get_supabase_admin_client
 
-def sync_resume_insights(user_id: str, skill_gaps: list[str]) -> None:
-    """
-    Called when a resume is analyzed. 
-    Updates global skill gaps and triggers roadmap regeneration.
-    """
-    if not user_id or not skill_gaps:
-        return
+class UserSyncService:
+    def ensure_profile(self, user_id: str, email: str, full_name: str | None = None) -> dict:
+        """Upserts a user profile into the profiles table."""
+        # Check if profile exists
+        client = get_supabase_admin_client()
+        resp = client.table("profiles").select("*").eq("id", user_id).execute()
         
-    print(f"Syncing {len(skill_gaps)} resume skill gaps for user {user_id}")
-    
-    # 1. Update the skill gaps and regenerate roadmap
-    system_service.regenerate_roadmap(user_id, skill_gaps=skill_gaps)
-    
-    # 2. Update the "Today's Focus" tasks automatically
-    system_service.generate_daily_plan(user_id)
+        if not resp.data:
+            # Create new profile
+            payload = {
+                "id": user_id,
+                "email": email,
+                "full_name": full_name or email.split("@")[0],
+                "role": "student" # Default role
+            }
+            res = client.table("profiles").insert(payload).execute()
+            return res.data[0] if res.data else {}
+            
+        return resp.data[0]
 
-def sync_github_insights(user_id: str, github_data: dict) -> None:
-    """
-    Updates global technical context based on GitHub activity.
-    Allows the AI Mentor to know the user's actual tech stack.
-    """
-    if not user_id or not github_data:
-        return
-        
-    state = system_service.get_state(user_id)
-    chat_context = state.get("chat_context") or {}
-    
-    # Extract top languages (identity)
-    langs = list((github_data.get("langRepoCount") or {}).keys())[:5]
-    
-    # Update context
-    chat_context["github_tech_stack"] = langs
-    chat_context["github_username"] = github_data.get("user", {}).get("login")
-    chat_context["github_summary"] = github_data.get("insights", "")
-    
-    print(f"Syncing GitHub tech stack ({langs}) for user {user_id}")
-    
-    # Save back to global state
-    system_service.save_state(
-        user_id=user_id,
-        tasks=state.get("tasks", []),
-        roadmap=state.get("roadmap", []),
-        notifications=state.get("notifications", []),
-        skill_gaps=state.get("skill_gaps", []),
-        chat_context=chat_context
-    )
-
-def sync_interview_insights(user_id: str, gaps: list[str]) -> None:
-    """
-    Updates global skill gaps based on interview performance.
-    Triggers roadmap regeneration to address weaknesses.
-    """
-    if not user_id or not gaps:
-        return
-        
-    print(f"Syncing {len(gaps)} interview gaps for user {user_id}")
-    
-    # Update the roadmap to address these new gaps
-    system_service.regenerate_roadmap(user_id, skill_gaps=gaps)
-    
-    # Update the "Today's Focus" tasks automatically
-    system_service.generate_daily_plan(user_id)
+sync_service = UserSyncService()

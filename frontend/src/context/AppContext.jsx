@@ -9,6 +9,7 @@ const initialState = {
   user:        null,
   isLoading:   true,
   isAuthenticated: false,
+  role:        'student',
   resumeData:  null,
   tasks:       [],
   progress: {
@@ -18,13 +19,13 @@ const initialState = {
     streak:           0,
     skillData:        [],
   },
+  chatContext: null,
   chatHistory: [],
   chatSessions: [],
   activeChatSessionId: '',
   notifications: [],
   roadmap: [],
   skillGaps: [],
-  chatContext: null,
 }
 
 // ─── Action Types ──────────────────────────────────────────────────────────────
@@ -120,6 +121,13 @@ function appReducer(state, action) {
           name: gap,
           level: Math.max(25, 70 - (idx * 8)),
         }))
+        
+        // Use the master radar score from the backend
+        const radar = action.payload.radar || {}
+        const masterScore = radar.consistency !== undefined 
+          ? Math.round((radar.resume + radar.technical + radar.interview + radar.consistency) / 4)
+          : Math.round(((action.payload.chatContext?.avgResumeScore || 0) * 0.45) + ((action.payload.chatContext?.avgInterviewScore || 0) * 0.4) + (taskCompletion * 0.15))
+
       return {
         ...state,
         tasks: nextTasks,
@@ -132,9 +140,9 @@ function appReducer(state, action) {
         activeChatSessionId: action.payload.activeChatSessionId ?? (state.activeChatSessionId || `chat-${Date.now()}`),
         progress: {
           ...state.progress,
-          readinessScore: Math.round(((action.payload.chatContext?.avgResumeScore || 0) * 0.45) + ((action.payload.chatContext?.avgInterviewScore || 0) * 0.4) + (taskCompletion * 0.15)),
+          readinessScore: masterScore,
           taskCompletion,
-          interviewScore: action.payload.chatContext?.avgInterviewScore || 0,
+          interviewScore: radar.interview || action.payload.chatContext?.avgInterviewScore || 0,
           skillData: skillData.length ? skillData : state.progress.skillData,
         },
       }
@@ -180,7 +188,10 @@ export function AppProvider({ children }) {
       try {
         const user = await getCurrentUser()
         dispatch({ type: ACTIONS.SET_USER, payload: user })
-        dispatch({ type: ACTIONS.INIT_CHAT_SESSION })
+        if (user?.role) {
+           // Direct update of role in state if needed, but SET_USER usually handles payload
+           // initialState is updated via SET_USER payload logic
+        }
         if (user) {
           const res = await fetch(`/api/system/insights?user_id=${encodeURIComponent(user.id || 'demo-user')}`, { cache: 'no-store' })
           if (res.ok) {

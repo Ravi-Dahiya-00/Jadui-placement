@@ -48,10 +48,23 @@ class CareerIntelligenceService:
             except Exception:
                 github_score = 0
                 
-        # 4. Consistency (Currently static or based on tasks if we had easier access)
-        # For now, we'll base it on how many things they've tried
-        tried_count = (1 if resume_history else 0) + (1 if interview_history else 0) + (1 if github_username else 0)
-        consistency_score = int((tried_count / 3) * 100)
+        # 4. Consistency (Activity + Code Quality)
+        # Base it on usage + average quality of PR reviews
+        from modules.github_review.services import service as review_service
+        pr_history = review_service.get_history(user_id, limit=10)
+        
+        usage_score = min(40, ((1 if resume_history else 0) + (1 if interview_history else 0) + (1 if github_username else 0) + (1 if pr_history else 0)) * 10)
+        
+        const_quality = 0
+        if pr_history:
+            const_quality = int(sum(r['score'] for r in pr_history) / len(pr_history))
+        
+        # Merge: 40% usage breadth, 60% code quality depth (if reviews available)
+        if pr_history:
+            consistency_score = int((usage_score * 0.4) + (const_quality * 0.6))
+        else:
+            # Fallback to simple usage breadth score if no reviews yet
+            consistency_score = int((usage_score / 40) * 100)
 
         return {
             "resume": resume_score,

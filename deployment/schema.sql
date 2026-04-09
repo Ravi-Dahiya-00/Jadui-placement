@@ -3,6 +3,16 @@
 -- Run this in your Supabase SQL Editor
 -- ==========================================
 
+-- 0. User Profiles (Role Management)
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email TEXT UNIQUE NOT NULL,
+    full_name TEXT,
+    avatar_url TEXT,
+    role TEXT DEFAULT 'student' CHECK (role IN ('student', 'admin')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- 1. User System State (Tasks, Roadmap, Notification, AI Context)
 CREATE TABLE IF NOT EXISTS public.user_system_state (
     user_id TEXT PRIMARY KEY,
@@ -74,6 +84,20 @@ CREATE TABLE IF NOT EXISTS public.interview_answers (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- 6. Workshops (Training Sessions)
+CREATE TABLE IF NOT EXISTS public.workshops (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title TEXT NOT NULL,
+    description TEXT,
+    skill_target TEXT,
+    curriculum JSONB DEFAULT '[]',
+    student_ids UUID[] DEFAULT '{}',
+    scheduled_at TIMESTAMP WITH TIME ZONE,
+    status TEXT DEFAULT 'suggested' CHECK (status IN ('suggested', 'scheduled', 'completed')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- Indices for performance
 CREATE INDEX IF NOT EXISTS idx_resume_results_file ON public.resume_results(file_id);
 CREATE INDEX IF NOT EXISTS idx_interview_answers_session ON public.interview_answers(session_id);
+CREATE INDEX IF NOT EXISTS idx_workshops_status ON public.workshops(status);
