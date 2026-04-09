@@ -1,8 +1,15 @@
 import Groq from 'groq-sdk';
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
+let groqInstance = null;
+
+function getGroqClient() {
+  if (!groqInstance) {
+    groqInstance = new Groq({
+      apiKey: process.env.GROQ_API_KEY || 'dummy-key-for-build',
+    });
+  }
+  return groqInstance;
+}
 
 const SYSTEM_PROMPT = `You are an expert technical recruiter with 15+ years of experience. 
 Your task is to analyze a candidate's resume against a job description and provide a structured evaluation.
@@ -38,6 +45,7 @@ ${resumeText}
 
 Analyze this candidate's fit for the role and return ONLY the JSON response.`;
 
+  const groq = getGroqClient();
   const completion = await groq.chat.completions.create({
     model: 'llama-3.3-70b-versatile',
     messages: [

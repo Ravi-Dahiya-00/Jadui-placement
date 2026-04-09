@@ -269,7 +269,7 @@ export default function InterviewPage() {
                 {messages.length === 0 ? (
                   <div className="text-center text-muted text-sm mt-20 opacity-60">
                      <Mic className="w-8 h-8 mx-auto mb-3" />
-                     Say "Hello" when you enter the room...
+                     Say &quot;Hello&quot; when you enter the room...
                   </div>
                 ) : (
                   messages.map((msg, idx) => (
