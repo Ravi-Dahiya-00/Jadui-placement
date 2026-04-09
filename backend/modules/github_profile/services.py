@@ -190,8 +190,13 @@ Provide a sharp, professional assessment for a "Jadui Placement" profile:
 5. **Actionable Growth**: One high-impact technical goal to improve their "hireability".
 
 Keep it to 5 concise bullet points. Use **bolding** for key skills and metrics. Plain text output."""
-    resp = model.generate_content(prompt)
-    return (resp.text or "").strip() or None
+    try:
+        resp = model.generate_content(prompt)
+        # Some responses are blocked by safety filters, accessing .text will raise an error
+        return (resp.text or "").strip() or None
+    except Exception as e:
+        print(f"Gemini insights failed (likely safety block): {e}")
+        return None
 
 
 def build_profile(username: str, include_insights: bool) -> dict[str, Any]:
@@ -242,7 +247,13 @@ def build_profile(username: str, include_insights: bool) -> dict[str, Any]:
             except Exception:
                 repo_commits[name] = []
 
-        user_created = _parse_github_dt(gh_user["created_at"])
+        created_at = gh_user.get("created_at")
+        if not created_at:
+            # Fallback to current time if created_at is missing for some reason
+            user_created = datetime.now(timezone.utc)
+        else:
+            user_created = _parse_github_dt(created_at)
+
         quarter_commit_count = _commits_for_quarters(user_created, repo_commits)
 
         lang_repo: dict[str, int] = defaultdict(int)

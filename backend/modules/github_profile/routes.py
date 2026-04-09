@@ -16,9 +16,9 @@ def github_can_load(user: str = Query(..., min_length=1, max_length=39)) -> dict
     return {"ok": can_load_quick(user)}
 
 
-@router.get("/github/profile/{username}")
+@router.get("/github/profile")
 def github_profile(
-    username: str,
+    username: str = Query(..., min_length=1, max_length=39),
     insights: bool = Query(False, description="Include Gemini summary when GEMINI_API_KEY is set"),
 ) -> dict[str, Any]:
     return build_profile(username, include_insights=insights)
