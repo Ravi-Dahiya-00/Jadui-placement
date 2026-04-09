@@ -1,0 +1,166 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── CSS Variables ────────────────────────────────────────────────────────── */
+:root {
+  --background:  #0a0a14;
+  --surface:     #111120;
+  --card:        #16162a;
+  --border:      rgba(99, 102, 241, 0.18);
+  --primary:     #6366f1;
+  --secondary:   #8b5cf6;
+  --accent:      #06b6d4;
+  --text:        #f8fafc;
+  --text-muted:  #94a3b8;
+  --radius:      0.75rem;
+}
+
+/* ─── Base Reset ────────────────────────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* ─── Custom Scrollbar ──────────────────────────────────────────────────────── */
+::-webkit-scrollbar         { width: 6px; height: 6px; }
+::-webkit-scrollbar-track   { background: var(--surface); }
+::-webkit-scrollbar-thumb   { background: rgba(99,102,241,0.4); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.7); }
+
+/* ─── Selection ─────────────────────────────────────────────────────────────── */
+::selection { background: rgba(99,102,241,0.3); color: #fff; }
+
+/* ─── Gradient Text Utility ─────────────────────────────────────────────────── */
+@layer utilities {
+  .gradient-text {
+    background: linear-gradient(135deg, #fff 0%, #a5b4fc 40%, #8b5cf6 80%, #06b6d4 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gradient-text-primary {
+    background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .glass {
+    background: rgba(22, 22, 42, 0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(99, 102, 241, 0.18);
+  }
+
+  .glass-light {
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .text-gradient-animated {
+    background: linear-gradient(270deg, #6366f1, #8b5cf6, #06b6d4, #6366f1);
+    background-size: 200% 200%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: gradient-shift 4s ease infinite;
+  }
+
+  @keyframes gradient-shift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+}
+
+/* ─── Card Base ─────────────────────────────────────────────────────────────── */
+@layer components {
+  .card-base {
+    @apply bg-card border border-border rounded-xl p-6 transition-all duration-300;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px rgba(99,102,241,0.08);
+  }
+  .card-base:hover {
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(99,102,241,0.22);
+    border-color: rgba(99,102,241,0.3);
+  }
+
+  .btn-primary {
+    @apply bg-primary hover:bg-primary-hover text-white font-semibold px-6 py-3 rounded-lg
+           transition-all duration-200 inline-flex items-center gap-2;
+    box-shadow: 0 0 20px rgba(99,102,241,0.3);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 0 32px rgba(99,102,241,0.5);
+    transform: translateY(-1px);
+  }
+
+  .btn-outline {
+    @apply border border-border bg-transparent text-white font-semibold px-6 py-3 rounded-lg
+           transition-all duration-200 inline-flex items-center gap-2;
+  }
+  .btn-outline:hover {
+    @apply border-primary bg-primary/10;
+    transform: translateY(-1px);
+  }
+
+  .input-base {
+    @apply w-full bg-surface border border-border rounded-lg px-4 py-3 text-white
+           placeholder:text-muted focus:outline-none focus:border-primary focus:ring-1
+           focus:ring-primary/40 transition-all duration-200;
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted font-medium
+           transition-all duration-200 cursor-pointer text-sm;
+  }
+  .sidebar-link:hover {
+    @apply bg-primary/10 text-white;
+  }
+  .sidebar-link.active {
+    @apply bg-primary/15 text-primary border-r-2 border-primary;
+  }
+}
+
+/* ─── Typing Cursor Animation ───────────────────────────────────────────────── */
+.typing-cursor::after {
+  content: '|';
+  animation: blink 1s step-end infinite;
+  color: var(--primary);
+}
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* ─── Progress Bar ──────────────────────────────────────────────────────────── */
+.progress-bar {
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  border-radius: 99px;
+  transition: width 1s ease;
+}
+
+/* ─── Orb Background ────────────────────────────────────────────────────────── */
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+}
