@@ -20,13 +20,13 @@ class CareerIntelligenceService:
         4. Consistency (Tasks/Activity)
         """
         # 1. Resume Score (Average of all analyses)
-        resume_history = resume_service.get_history(limit=5)
+        resume_history = resume_service.get_history(user_id=user_id, limit=5)
         resume_score = 0
         if resume_history:
             resume_score = int(sum(r['score'] for r in resume_history) / len(resume_history))
             
         # 2. Interview Score (Average of all sessions)
-        interview_history = interview_service.get_history(limit=5)
+        interview_history = interview_service.get_history(user_id=user_id, limit=5)
         interview_score = 0
         if interview_history:
             interview_score = int(sum(i['overall_score'] for i in interview_history) / len(interview_history))

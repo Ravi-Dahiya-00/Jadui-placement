@@ -388,12 +388,16 @@ class InterviewAIService:
             
         return feedback
 
-    def get_history(self, limit: int = 10) -> list[dict[str, Any]]:
+    def get_history(self, user_id: str | None = None, limit: int = 10) -> list[dict[str, Any]]:
         limit = max(1, min(limit, 50))
+        supabase = get_supabase_admin_client()
+        
+        query = supabase.table("interview_sessions").select("*")
+        if user_id:
+            query = query.eq("user_id", user_id)
+            
         sessions_resp = (
-            get_supabase_admin_client()
-            .table("interview_sessions")
-            .select("*")
+            query
             .order("created_at", desc=True)
             .limit(limit)
             .execute()

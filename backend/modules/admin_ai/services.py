@@ -171,32 +171,46 @@ class AdminService:
 
     def get_dashboard_stats(self) -> dict[str, Any]:
         """Calculates high-level metrics for the TPO dashboard."""
-        client = get_supabase_admin_client()
-        
-        # 1. Total Students
-        profiles = client.table("profiles").select("id, is_shortlisted").eq("role", "student").execute().data or []
-        total_students = len(profiles)
-        shortlisted_students = len([p for p in profiles if p.get("is_shortlisted")])
-        
-        # 2. Avg Readiness (Expensive but accurate)
-        # In a real environment, we would cache this or use a materialized view.
-        readiness_scores = []
-        for p in profiles[:50]: # Limit sampling for performance in dev
-            radar = intelligence_service.get_readiness_radar(p['id'])
-            if radar:
-                readiness_scores.append(sum(radar.values()) / 4)
-        
-        avg_readiness = int(sum(readiness_scores) / len(readiness_scores)) if readiness_scores else 0
-        
-        # 3. Placed Students (Simulated based on readiness > 85 for now)
-        placed_students = len([s for s in readiness_scores if s > 85])
-        
-        return {
-            "total_students": total_students,
-            "placed_students": placed_students,
-            "shortlisted_students": shortlisted_students,
-            "avg_readiness": avg_readiness,
-            "active_workshops": 3 # Placeholder for scheduled workshops
-        }
+        try:
+            client = get_supabase_admin_client()
+            
+            # 1. Total Students
+            profiles = client.table("profiles").select("id, is_shortlisted").eq("role", "student").execute().data or []
+            total_students = len(profiles)
+            shortlisted_students = len([p for p in profiles if p.get("is_shortlisted")])
+            
+            # 2. Avg Readiness (Expensive but accurate)
+            readiness_scores = []
+            for p in profiles[:50]: # Limit sampling for performance in dev
+                try:
+                    radar = intelligence_service.get_readiness_radar(p['id'])
+                    if radar:
+                        readiness_scores.append(sum(radar.values()) / 4)
+                except Exception:
+                    continue
+            
+            avg_readiness = int(sum(readiness_scores) / len(readiness_scores)) if readiness_scores else 0
+            
+            # 3. Placed Students (Simulated based on readiness > 85 for now)
+            placed_students = len([s for s in readiness_scores if s > 85])
+            
+            return {
+                "total_students": total_students,
+                "placed_students": placed_students,
+                "shortlisted_students": shortlisted_students,
+                "avg_readiness": avg_readiness,
+                "active_workshops": 3 # Placeholder
+            }
+        except Exception as e:
+            print(f"FAILED TO FETCH DASHBOARD STATS (Likely missing SQL sync): {e}")
+            # Return safe zeros so the frontend doesn't crash
+            return {
+                "total_students": 0,
+                "placed_students": 0,
+                "shortlisted_students": 0,
+                "avg_readiness": 0,
+                "active_workshops": 0,
+                "error_hint": "Database out of sync. Run deployment/schema.sql"
+            }
 
 admin_service = AdminService()

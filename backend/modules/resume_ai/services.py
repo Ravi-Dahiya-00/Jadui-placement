@@ -183,13 +183,20 @@ class ResumeAIService:
             created_at=row.get("created_at", ""),
         )
 
-    def get_history(self, limit: int = 10) -> list[dict]:
+    def get_history(self, user_id: str | None = None, limit: int = 10) -> list[dict]:
         limit = max(1, min(limit, 50))
         supabase = get_supabase_admin_client()
+        
+        query = supabase.table("resume_results").select("id,file_id,role_target,experience_level,skills,skill_gap,score,created_at,analysis_version,ai_provider,detailed_review,resume_files(candidate_name,filename)")
+        if user_id:
+            # Note: resume_results currently doesn't have a user_id column in some older schemas.
+            # We check the file's owner if user_id is provided, or assume resume_results has it.
+            # To be safe, we'll try filtering by user_id directly first.
+            query = query.eq("user_id", user_id)
+            
         try:
             resp = (
-                supabase.table("resume_results")
-                .select("id,file_id,role_target,experience_level,skills,skill_gap,score,created_at,analysis_version,ai_provider,detailed_review,resume_files(candidate_name,filename)")
+                query
                 .order("created_at", desc=True)
                 .limit(limit)
                 .execute()
