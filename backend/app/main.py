@@ -2,8 +2,8 @@
 
 from fastapi import FastAPI
 
-from backend.modules.interview_ai.routes import router as interview_router
-from backend.modules.resume_ai.routes import router as resume_router
+from modules.interview_ai.routes import router as interview_router
+from modules.resume_ai.routes import router as resume_router
 
 app = FastAPI(title="Agentic AI Career Coach Backend")
 app.include_router(interview_router)
