@@ -1,5 +1,28 @@
 import { NextResponse } from 'next/server';
 
+function buildIdealFramework(question) {
+  const q = String(question || '').toLowerCase();
+  if (q.includes('debug')) {
+    return [
+      'Problem: Describe the production issue and user/business impact.',
+      'Action: Explain reproduction, logs/metrics used, hypothesis, and root-cause isolation.',
+      'Result: Share fix, measurable improvement, and prevention (alerts/tests/runbook).',
+    ];
+  }
+  if (q.includes('challenging problem') || q.includes('challenge')) {
+    return [
+      'Problem: Define constraints, scale, and why it was hard.',
+      'Action: Explain architecture decision, trade-offs, and implementation details.',
+      'Result: Quantify impact (latency, reliability, cost, delivery speed).',
+    ];
+  }
+  return [
+    'Problem/Context: Brief role context and objective.',
+    'Action: Specific technical execution (stack, APIs, database, design choices).',
+    'Result: Quantified business/engineering outcome and key learning.',
+  ];
+}
+
 export async function POST(req) {
   try {
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
@@ -75,6 +98,7 @@ export async function POST(req) {
         score: e.overall,
         feedback: e.feedback,
         suggestions: e.suggestions || [],
+        idealFramework: buildIdealFramework(e.question),
       })),
     };
 

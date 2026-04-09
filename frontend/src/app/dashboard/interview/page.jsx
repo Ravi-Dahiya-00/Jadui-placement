@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { Mic, Play, Loader2, PhoneOff, User, Bot, Sparkles } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Mic, Play, Loader2, PhoneOff, User, Bot, Sparkles, ArrowRight, Volume2 } from 'lucide-react'
 import RoleSelector  from '@/features/interview/RoleSelector'
 import FeedbackPanel from '@/features/interview/FeedbackPanel'
 import InterviewCard from '@/features/interview/InterviewCard'
@@ -9,6 +9,16 @@ import { cn } from '@/lib/utils'
 import { useApp } from '@/context/AppContext'
 
 const STAGES = { select: 'select', interview: 'interview', feedback: 'feedback' }
+
+/** Default skills + labels so the backend (Gemini) gets enough context for sharp questions */
+const ROLE_META = {
+  sde:        { label: 'Software / Backend',       techstack: 'APIs, databases, distributed systems, observability' },
+  frontend:   { label: 'Frontend / React',         techstack: 'React, TypeScript, performance, accessibility, state' },
+  fullstack:  { label: 'Full Stack',               techstack: 'React, Node, APIs, SQL, deployment' },
+  data:       { label: 'Data Science / ML',        techstack: 'Python, ML pipelines, experimentation, metrics' },
+  networking: { label: 'System Design',          techstack: 'scaling, reliability, networking, distributed systems' },
+  pm:         { label: 'Product Manager',        techstack: 'roadmaps, metrics, stakeholder management, discovery' },
+}
 
 export default function InterviewPage() {
   const { state } = useApp()
@@ -25,9 +35,20 @@ export default function InterviewPage() {
   const [callStatus, setCallStatus] = useState('INACTIVE') // INACTIVE, CONNECTING, ACTIVE, FINISHED
   const [messages, setMessages] = useState([])
   const [isSpeaking, setIsSpeaking] = useState(false)
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
+  const [speechEnabled, setSpeechEnabled] = useState(true)
   const transcriptRef = useRef(null)
   const recognitionRef = useRef(null)
   const shouldKeepListeningRef = useRef(false)
+
+  const speakQuestion = useCallback((text) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis || !text?.trim()) return
+    window.speechSynthesis.cancel()
+    const u = new SpeechSynthesisUtterance(text)
+    u.lang = 'en-US'
+    u.rate = 0.92
+    window.speechSynthesis.speak(u)
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -38,8 +59,17 @@ export default function InterviewPage() {
       if (recognitionRef.current) {
         recognitionRef.current.stop()
       }
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel()
+      }
     }
   }, [])
+
+  useEffect(() => {
+    if (stage !== STAGES.interview || !questions.length || !speechEnabled) return
+    if (currentQuestionIndex < 0 || currentQuestionIndex >= questions.length) return
+    speakQuestion(questions[currentQuestionIndex])
+  }, [stage, questions, currentQuestionIndex, speechEnabled, speakQuestion])
 
   // Scroll to bottom of transcript automatically
   useEffect(() => {
@@ -56,15 +86,18 @@ export default function InterviewPage() {
     setCallStatus('CONNECTING')
 
     try {
-      // Create questions via our new local backend Generator
+      const meta = ROLE_META[role] || { label: role, techstack: '' }
       let generatedQuestions = []
       try {
         const response = await fetch('/api/interview/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            role: role,
-            amount: 3,
+            role,
+            type: 'mixed',
+            level: 'mid-level',
+            techstack: meta.techstack,
+            amount: 5,
             userid: state.user?.id || 'demo-user'
           })
         })
@@ -73,15 +106,27 @@ export default function InterviewPage() {
         if (data.interviewId) setInterviewId(data.interviewId)
       } catch (err) {
         console.warn('Backend generation failed, using fallback questions', err)
-        generatedQuestions = ['Tell me about your background.', 'How do you handle conflict?']
+        generatedQuestions = [
+          `For a ${meta.label} role: describe a production issue you owned end-to-end — detection, mitigation, and what you changed to prevent recurrence.`,
+          `How do you balance delivery speed with quality for ${meta.techstack || 'your stack'}? Give a concrete example with trade-offs.`,
+        ]
+      }
+
+      if (!generatedQuestions.length) {
+        generatedQuestions = [
+          `Walk through a challenging project relevant to ${meta.label}. Focus on constraints, decisions, and measurable outcomes.`,
+        ]
       }
 
       setQuestions(generatedQuestions)
+      setCurrentQuestionIndex(0)
+      const total = generatedQuestions.length
+      const first = generatedQuestions[0]
       setMessages([
         {
           role: 'bot',
-          content: `Interview started for ${role}. Speak your answer clearly. First question: ${generatedQuestions[0] || 'Please introduce yourself and your recent work.'}`
-        }
+          content: `Question 1 of ${total}: ${first}`,
+        },
       ])
 
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
@@ -130,6 +175,24 @@ export default function InterviewPage() {
       setLoading(false)
       setStage(STAGES.select)
     }
+  }
+
+  const goNextQuestion = () => {
+    if (currentQuestionIndex >= questions.length - 1) return
+    const next = currentQuestionIndex + 1
+    setCurrentQuestionIndex(next)
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: 'bot',
+        content: `Question ${next + 1} of ${questions.length}: ${questions[next]}`,
+      },
+    ])
+  }
+
+  const replayQuestion = () => {
+    if (!questions.length || currentQuestionIndex >= questions.length) return
+    speakQuestion(questions[currentQuestionIndex])
   }
 
   const handleDisconnect = async () => {
@@ -199,8 +262,12 @@ export default function InterviewPage() {
     setQuestions([])
     setInterviewId(null)
     setMessages([])
+    setCurrentQuestionIndex(0)
     setFeedback(null)
     setCallStatus('INACTIVE')
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel()
+    }
   }
 
   return (
@@ -265,7 +332,54 @@ export default function InterviewPage() {
 
       {/* Stage: Interview Active */}
       {stage === STAGES.interview && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-slide-up">
+        <div className="space-y-4 animate-slide-up">
+          {questions.length > 0 && (
+            <div className="bg-surface/60 border border-accent/25 rounded-2xl p-5 shadow-glow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-accent mb-1">
+                    Current question ({currentQuestionIndex + 1} / {questions.length})
+                  </p>
+                  <p className="text-white text-base leading-relaxed">
+                    {questions[currentQuestionIndex]}
+                  </p>
+                  <p className="text-muted text-xs mt-2">
+                    Answer out loud; your speech is captured in the transcript. Advance when you are ready for the next prompt.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 shrink-0">
+                  <label className="flex items-center gap-2 text-xs text-muted cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={speechEnabled}
+                      onChange={(e) => setSpeechEnabled(e.target.checked)}
+                      className="rounded border-border"
+                    />
+                    Read aloud
+                  </label>
+                  <button
+                    type="button"
+                    onClick={replayQuestion}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-card border border-border text-xs text-white hover:bg-primary/10"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" />
+                    Replay
+                  </button>
+                  <button
+                    type="button"
+                    onClick={goNextQuestion}
+                    disabled={currentQuestionIndex >= questions.length - 1}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary/20 border border-primary/40 text-xs font-medium text-white hover:bg-primary/30 disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    Next question
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
           {/* Active Call UI */}
           <div className="bg-card border border-border rounded-2xl flex flex-col overflow-hidden shadow-glow-sm">
@@ -317,7 +431,7 @@ export default function InterviewPage() {
                 {messages.length === 0 ? (
                   <div className="text-center text-muted text-sm mt-20 opacity-60">
                      <Mic className="w-8 h-8 mx-auto mb-3" />
-                     Say &quot;Hello&quot; when you enter the room...
+                     Your spoken answers will appear here. Respond to the current question above.
                   </div>
                 ) : (
                   messages.map((msg, idx) => (
@@ -339,6 +453,7 @@ export default function InterviewPage() {
                 )}
              </div>
           </div>
+        </div>
         </div>
       )}
 

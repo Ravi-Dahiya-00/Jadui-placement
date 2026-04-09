@@ -25,8 +25,20 @@ class InterviewAIService:
     - feedback + scoring logic (PulseAI createFeedback action)
     """
 
+    def _resolve_interview_provider(self) -> str:
+        """
+        Interview flows prefer Gemini when GEMINI_API_KEY is set (unless overridden).
+        Set INTERVIEW_AI_PROVIDER=openai to force OpenAI even if a Gemini key exists.
+        """
+        explicit = os.getenv("INTERVIEW_AI_PROVIDER", "").strip().lower()
+        if explicit in ("gemini", "openai"):
+            return explicit
+        if os.getenv("GEMINI_API_KEY"):
+            return "gemini"
+        return os.getenv("AI_PROVIDER", "openai").strip().lower()
+
     def _llm_generate(self, prompt: str) -> str:
-        provider = os.getenv("AI_PROVIDER", "openai").strip().lower()
+        provider = self._resolve_interview_provider()
 
         if provider == "gemini":
             try:
@@ -39,7 +51,12 @@ class InterviewAIService:
                 raise HTTPException(status_code=500, detail="Missing GEMINI_API_KEY")
 
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
+            model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+            gen_cfg = {
+                "temperature": float(os.getenv("GEMINI_TEMPERATURE", "0.65")),
+                "max_output_tokens": int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "8192")),
+            }
+            model = genai.GenerativeModel(model_name, generation_config=gen_cfg)
             response = model.generate_content(prompt)
             return response.text or ""
 
@@ -58,14 +75,40 @@ class InterviewAIService:
         return response.output_text
 
     def _fallback_question_set(self, role: str, skills: list[str], question_count: int) -> list[str]:
-        seed = ", ".join(skills[:3]) if skills else "core fundamentals"
-        base = [
-            f"Introduce your experience relevant to the {role} role.",
-            f"Explain a challenging problem you solved using {seed}.",
-            "How do you approach debugging in production systems?",
-            "Describe how you ensure code quality and maintainability.",
-            "What trade-offs do you consider before choosing an architecture?",
-        ]
+        seed = ", ".join(skills[:3]) if skills else "your stack"
+        role_l = role.lower()
+        if "data" in role_l or "ml" in role_l:
+            base = [
+                f"Walk through an end-to-end ML project: problem framing, data quality, modeling choice, and how you measured offline vs online performance.",
+                f"Describe a time when a model or pipeline failed in production. What did you monitor, how did you find root cause, and what did you change?",
+                f"How would you design a feature store or training pipeline for {seed}? Call out failure modes and idempotency.",
+                "How do you balance fairness, latency, and interpretability when shipping a model to users?",
+                "Explain how you’d validate a new ranking or recommendation change before full rollout.",
+            ]
+        elif "pm" in role_l or "product" in role_l:
+            base = [
+                "Describe a product decision where data and user research conflicted. How did you prioritize and what shipped?",
+                "How do you turn a vague stakeholder request into a measurable outcome and roadmap?",
+                "Tell me about a launch that missed expectations. What leading indicators would you watch next time?",
+                "How do you run trade-off conversations between engineering, design, and GTM under time pressure?",
+                "What is your framework for saying no to a high-impact idea?",
+            ]
+        elif "system" in role_l or "network" in role_l:
+            base = [
+                f"Design a high‑availability API for {seed}. Cover scaling, failure domains, and how you’d test failure modes.",
+                "How would you design a rate limiter and cache layer for a viral traffic spike? Discuss consistency and hot keys.",
+                "Walk through a production incident: detection, mitigation, communication, and permanent fix.",
+                "Compare synchronous vs event-driven flows for a core user journey. When would you choose each?",
+                "How do you approach capacity planning and cost controls for a growing service?",
+            ]
+        else:
+            base = [
+                f"Walk me through a concrete system or feature you shipped: constraints, design, trade-offs, and how you measured success.",
+                f"Describe a hard bug or outage in production. How did you narrow it down, fix it, and prevent recurrence?",
+                f"How would you review a design for {seed}? What risks, failure modes, and tests would you insist on?",
+                "Tell me about a time you disagreed with a teammate on technical direction. How was it resolved?",
+                "What is your approach to testing, observability, and safe deployment for a critical path?",
+            ]
         return base[:question_count]
 
     def _fallback_evaluation(self, question: str, answer: str, skills: list[str]) -> dict[str, Any]:

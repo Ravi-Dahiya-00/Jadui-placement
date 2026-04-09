@@ -96,6 +96,16 @@ export default function FeedbackPanel({ feedback, onRestart }) {
                     ))}
                   </ul>
                 )}
+                {Array.isArray(a.idealFramework) && a.idealFramework.length > 0 && (
+                  <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-3">
+                    <p className="text-[11px] font-semibold text-primary mb-1">Ideal Answer Framework (PAR/STAR)</p>
+                    <ul className="space-y-1">
+                      {a.idealFramework.map((step, idx) => (
+                        <li key={idx} className="text-[11px] text-muted">- {step}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             ))}
           </div>
