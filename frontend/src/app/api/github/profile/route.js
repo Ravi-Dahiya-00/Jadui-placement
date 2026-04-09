@@ -20,9 +20,10 @@ export async function GET(request) {
     }
 
     const qs = new URLSearchParams()
+    qs.set('username', username)
     if (insights) qs.set('insights', 'true')
 
-    const url = `${backendUrl.replace(/\/$/, '')}/github/profile/${encodeURIComponent(username)}?${qs}`
+    const url = `${backendUrl.replace(/\/$/, '')}/github/profile?${qs}`
     const res = await fetch(url, { method: 'GET', cache: 'no-store' })
     const data = await res.json().catch(() => ({}))
 
