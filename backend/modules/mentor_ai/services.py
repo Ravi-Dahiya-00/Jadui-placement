@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import os
 from typing import Any
-
 from fastapi import HTTPException
-
+from app.core.config import settings
 
 class MentorService:
     def generate_reply(self, system_prompt: str, history: list[dict[str, Any]], message: str) -> str:
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = settings.GEMINI_API_KEY
         if not api_key:
             raise HTTPException(status_code=503, detail="GEMINI_API_KEY not configured on backend")
 

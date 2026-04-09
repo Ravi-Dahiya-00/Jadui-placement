@@ -154,4 +154,63 @@ class SystemStateService:
         )
 
 
+    def generate_daily_plan(self, user_id: str) -> dict:
+        """
+        Reactive Scheduler: Generates 3 high-impact tasks for "Today" 
+        based on the latest synced skill gaps.
+        """
+        state = self.get_state(user_id)
+        gaps = state.get("skill_gaps") or []
+        
+        # Determine focal points
+        focus_a = gaps[0] if len(gaps) > 0 else "Core Fundamentals"
+        focus_b = gaps[1] if len(gaps) > 1 else "Interview Clarity"
+        
+        from datetime import datetime
+        now_ts = int(datetime.now().timestamp())
+        
+        generated_tasks = [
+            {
+                "id": f"auto-plan-{now_ts}-1",
+                "title": f"Study & Practice: {focus_a} (45 min)",
+                "category": "Core",
+                "completed": False,
+                "due": "Today",
+                "source": "AI Auto-Pilot"
+            },
+            {
+                "id": f"auto-plan-{now_ts}-2",
+                "title": f"Targeted drill: {focus_b} (2 practice problems)",
+                "category": "DSA",
+                "completed": False,
+                "due": "Today",
+                "source": "AI Auto-Pilot"
+            },
+            {
+                "id": f"auto-plan-{now_ts}-3",
+                "title": "STAR method simulation: Explain a recent project gap (20 min)",
+                "category": "Interview",
+                "completed": False,
+                "due": "Today",
+                "source": "AI Auto-Pilot"
+            },
+        ]
+        
+        # Merge with existing non-today tasks
+        current_tasks = state.get("tasks") or []
+        other_tasks = [t for t in current_tasks if t.get("due") != "Today"]
+        new_task_list = generated_tasks + other_tasks
+        
+        return self.save_state(
+            user_id=user_id,
+            tasks=new_task_list,
+            roadmap=state.get("roadmap", []),
+            notifications=state.get("notifications", []),
+            skill_gaps=gaps,
+            chat_context=state.get("chat_context", {}),
+            chat_history=state.get("chat_history", []),
+            chat_sessions=state.get("chat_sessions", []),
+            active_chat_session_id=state.get("active_chat_session_id", ""),
+        )
+
 service = SystemStateService()

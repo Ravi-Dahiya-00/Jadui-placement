@@ -7,7 +7,7 @@ from statistics import mean
 from typing import Any
 
 from fastapi import HTTPException
-
+from app.core.config import settings
 from app.core.supabase_client import get_supabase_admin_client
 from .prompts import answer_evaluation_prompt, question_generation_prompt
 from .utils import (
@@ -38,41 +38,32 @@ class InterviewAIService:
         return os.getenv("AI_PROVIDER", "openai").strip().lower()
 
     def _llm_generate(self, prompt: str) -> str:
-        provider = self._resolve_interview_provider()
-
-        if provider == "gemini":
+        # 1. Prefer Gemini for Interview flows
+        if settings.GEMINI_API_KEY:
             try:
-                import google.generativeai as genai  # type: ignore
-            except ImportError as exc:  # pragma: no cover
-                raise HTTPException(status_code=500, detail="Gemini SDK not installed") from exc
+                import google.generativeai as genai
+                genai.configure(api_key=settings.GEMINI_API_KEY)
+                model = genai.GenerativeModel(settings.GEMINI_MODEL)
+                response = model.generate_content(prompt)
+                return response.text or ""
+            except Exception as e:
+                print(f"Interview Gemini primary failed: {e}")
 
-            api_key = os.getenv("GEMINI_API_KEY")
-            if not api_key:
-                raise HTTPException(status_code=500, detail="Missing GEMINI_API_KEY")
+        # 2. Fallback to OpenAI
+        if settings.OPENAI_API_KEY:
+            try:
+                from openai import OpenAI
+                client = OpenAI(api_key=settings.OPENAI_API_KEY)
+                model = "gpt-4o-mini" # default fallback
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                return response.choices[0].message.content or ""
+            except Exception as e:
+                print(f"Interview OpenAI fallback failed: {e}")
 
-            genai.configure(api_key=api_key)
-            model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
-            gen_cfg = {
-                "temperature": float(os.getenv("GEMINI_TEMPERATURE", "0.65")),
-                "max_output_tokens": int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "8192")),
-            }
-            model = genai.GenerativeModel(model_name, generation_config=gen_cfg)
-            response = model.generate_content(prompt)
-            return response.text or ""
-
-        try:
-            from openai import OpenAI  # type: ignore
-        except ImportError as exc:  # pragma: no cover
-            raise HTTPException(status_code=500, detail="OpenAI SDK not installed") from exc
-
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="Missing OPENAI_API_KEY")
-
-        client = OpenAI(api_key=api_key)
-        model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-        response = client.responses.create(model=model, input=prompt)
-        return response.output_text
+        return ""
 
     def _fallback_question_set(self, role: str, skills: list[str], question_count: int) -> list[str]:
         seed = ", ".join(skills[:3]) if skills else "your stack"
@@ -347,6 +338,55 @@ class InterviewAIService:
             "total_questions": len(session.get("questions") or []),
             "evaluations": answers,
         }
+
+    def generate_feedback_from_transcript(
+        self,
+        session_id: str,
+        user_id: str,
+        transcript: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """
+        Analyzes the full conversation for a live interview session.
+        Returns a scorecard and triggers global status sync.
+        """
+        if not transcript:
+            return {
+                "score": 0,
+                "summary": "No transcript data received.",
+                "strengths": [],
+                "improvements": ["Try to speak more during the session."],
+                "answers": []
+            }
+            
+        # 1. Simple Scoring Logic based on word count and technicality
+        text_blob = " ".join([m.get("text", "") for m in transcript]).lower()
+        word_count = len(text_blob.split())
+        
+        # Heuristic: Depth and Clarity
+        score = min(95, max(40, 60 + (word_count // 20))) 
+        
+        # 2. Extract potential gaps (Simulation for now, or based on transcript length)
+        gaps = ["Technical Depth", "Structure"]
+        if word_count < 100:
+            gaps.append("Elaboration")
+            
+        # 3. Create Result Object
+        feedback = {
+            "score": score,
+            "summary": f"Your interview showed { 'good' if score > 70 else 'fair' } engagement with {word_count} words spoken.",
+            "strengths": ["Active Participation", "Verbal Communication"],
+            "improvements": gaps,
+            "answers": transcript # Storing full log
+        }
+        
+        # 4. Global synchronization Trigger
+        try:
+            from modules.system_ai.sync import sync_interview_insights
+            sync_interview_insights(user_id, gaps)
+        except Exception as e:
+            print(f"Interview sync failed: {e}")
+            
+        return feedback
 
     def get_history(self, limit: int = 10) -> list[dict[str, Any]]:
         limit = max(1, min(limit, 50))

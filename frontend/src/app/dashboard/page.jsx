@@ -273,6 +273,43 @@ export default function DashboardPage() {
       .join(' ')
   }, [readinessTrend])
 
+  const [goalSaved, setGoalSaved] = useState(false)
+  const [syncingBooster, setSyncingBooster] = useState(null)
+
+  const handleApplyBooster = async (boosterText, index) => {
+    const latestResumeId = resumeHistory[0]?.id
+    if (!latestResumeId) return
+    
+    setSyncingBooster(index)
+    try {
+      const res = await fetch('/api/resume/result', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          result_id: latestResumeId,
+          add_strengths: [boosterText]
+        })
+      })
+      
+      if (!res.ok) throw new Error('Failed to apply booster')
+      
+      const data = await res.json()
+      
+      // Update global context
+      dispatch({ 
+        type: ACTIONS.SET_RESUME, 
+        payload: data.result 
+      })
+
+      // Show temporary success state
+      setSyncingBooster( -1 ) // -1 for success indicator
+      setTimeout(() => setSyncingBooster(null), 2000)
+    } catch (err) {
+      console.error('Booster application failed:', err)
+      setSyncingBooster(null)
+    }
+  }
+
   const saveGoal = async () => {
     const mergedContext = {
       ...(chatContext || {}),
@@ -490,11 +527,23 @@ export default function DashboardPage() {
           <div className="space-y-4">
             {careerSuggestions.length > 0 ? (
               careerSuggestions.map((sug, i) => (
-                <div key={i} className="relative pl-4 border-l-2 border-primary/30 group/item">
+                <div key={i} className="relative pl-4 border-l-2 border-primary/30 group/item flex justify-between items-start gap-4">
                   <div className="absolute -left-[5px] top-1.5 w-2 h-2 rounded-full bg-primary/40 group-hover/item:bg-primary transition-colors" />
                   <p className="text-sm text-muted group-hover/item:text-white transition-colors leading-relaxed">
                     {sug}
                   </p>
+                  <button 
+                    disabled={syncingBooster !== null}
+                    onClick={() => handleApplyBooster(sug, i)}
+                    className={cn(
+                      "flex-shrink-0 text-[10px] font-bold uppercase py-1 px-2 rounded border transition-all",
+                      syncingBooster === i ? "bg-primary/20 text-primary animate-pulse" : 
+                      syncingBooster === -1 ? "bg-success/20 text-success border-success/30" :
+                      "bg-surface border-border text-muted hover:text-white hover:border-primary/50"
+                    )}
+                  >
+                    {syncingBooster === i ? "Applying..." : syncingBooster === -1 ? "✓ Added" : "Add to Resume"}
+                  </button>
                 </div>
               ))
             ) : (

@@ -7,6 +7,7 @@ import re
 from typing import Any
 
 from fastapi import HTTPException
+from app.core.config import settings
 
 from .prompts import (
     experience_review_prompt,
@@ -453,31 +454,35 @@ class ResumeAnalyzer:
         return [s for s in target_skills if s.lower() not in extracted]
 
     def _llm_json(self, prompt: str) -> dict[str, Any]:
-        provider = os.getenv("AI_PROVIDER", "openai").lower()
-
-        if provider == "gemini":
+        """
+        Executes LLM call with a priority for Groq for resume analysis.
+        """
+        # Resume analysis performs best on Groq (Llama 3) for speed and JSON extraction
+        if settings.GROQ_API_KEY:
             try:
-                import google.generativeai as genai  # type: ignore
-            except ImportError as exc:
-                raise HTTPException(status_code=500, detail="Gemini SDK not installed") from exc
-            key = os.getenv("GEMINI_API_KEY")
-            if not key:
-                raise HTTPException(status_code=500, detail="Missing GEMINI_API_KEY")
-            genai.configure(api_key=key)
-            model = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
-            raw = model.generate_content(prompt).text or "{}"
-            return safe_json_from_text(raw)
+                from openai import OpenAI
+                client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=settings.GROQ_API_KEY)
+                resp = client.chat.completions.create(
+                    model=settings.GROQ_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    response_format={"type": "json_object"}
+                )
+                return safe_json_from_text(resp.choices[0].message.content or "{}")
+            except Exception as e:
+                print(f"Groq primary failed, falling back: {e}")
 
-        try:
-            from openai import OpenAI  # type: ignore
-        except ImportError as exc:
-            raise HTTPException(status_code=500, detail="OpenAI SDK not installed") from exc
-        key = os.getenv("OPENAI_API_KEY")
-        if not key:
-            raise HTTPException(status_code=500, detail="Missing OPENAI_API_KEY")
-        client = OpenAI(api_key=key)
-        resp = client.responses.create(model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"), input=prompt)
-        return safe_json_from_text(resp.output_text or "{}")
+        # Fallback to Gemini
+        if settings.GEMINI_API_KEY:
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=settings.GEMINI_API_KEY)
+                model = genai.GenerativeModel(settings.GEMINI_MODEL)
+                raw = model.generate_content(prompt).text or "{}"
+                return safe_json_from_text(raw)
+            except Exception as e:
+                print(f"Gemini fallback failed: {e}")
+
+        return {}
 
     def _llm_cleanup_resume(self, raw_resume_text: str) -> dict[str, Any]:
         prompt = resume_cleanup_prompt(raw_resume_text)

@@ -7,69 +7,61 @@ import { useApp, ACTIONS } from '@/context/AppContext'
 import { cn } from '@/lib/utils'
 
 export default function ResumeUpload({ onResult, onUploaded }) {
-  const { dispatch } = useApp()
-  const [file, setFile] = useState(null)
-  const [roleTarget, setRoleTarget] = useState('Software Engineer')
-  const [targetSkills, setTargetSkills] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  const onDrop = useCallback((acceptedFiles) => {
-    const f = acceptedFiles[0]
-    if (!f) return
-    if (f.size > 5 * 1024 * 1024) { 
-      setError('File must be under 5 MB.')
-      return 
-    }
-    setError('')
-    setFile(f)
-  }, [])
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      'application/pdf': ['.pdf'],
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-      'text/plain': ['.txt'],
-    },
-    maxFiles: 1
-  })
+  const { state: { user }, dispatch } = useApp()
+  const userId = user?.id || 'default-user'
 
   const handleUpload = async () => {
     if (!file) return
     setLoading(true)
     setError('')
     try {
+      // Step 1: Upload the file
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('jdText', roleTarget)
-      formData.append('targetSkills', targetSkills)
-
-      const response = await fetch('/api/resume/analyze', {
+      
+      const uploadRes = await fetch('/api/resume/upload', {
         method: 'POST',
         body: formData,
       })
-
-      const data = await response.json()
       
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to analyze resume.')
-      }
+      const uploadData = await uploadRes.json()
+      if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed')
+      
+      const fileId = uploadData.file_id
 
-      dispatch({ type: ACTIONS.SET_RESUME, payload: data })
+      // Step 2: Trigger Analysis with Connectivity Bridge
+      const analyzeRes = await fetch('/api/resume/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          file_id: fileId,
+          role_target: roleTarget,
+          target_skills: targetSkills.split(',').map(s => s.trim()).filter(Boolean),
+          use_llm: true
+        }),
+      })
+
+      const analyzeData = await analyzeRes.json()
+      if (!analyzeRes.ok) throw new Error(analyzeData.error || 'Analysis failed')
+
+      dispatch({ type: ACTIONS.SET_RESUME, payload: analyzeData.analysis })
+      
+      // Auto-refresh Dashboard insights since roadmap was regenerated on backend
       try {
         const insightsRes = await fetch('/api/system/insights', { cache: 'no-store' })
         if (insightsRes.ok) {
           const insights = await insightsRes.json()
           dispatch({ type: ACTIONS.SET_SYSTEM_INSIGHTS, payload: insights })
         }
-      } catch {
-        // Non-blocking; resume result is still available
+      } catch (err) {
+        console.warn('Dashboard sync skipped:', err)
       }
-      onResult?.(data)
+      
+      onResult?.(analyzeData.analysis)
       onUploaded?.()
     } catch (err) {
-      setError(err.message || 'Upload failed. Please try again.')
+      setError(err.message || 'Workflow failed. Please try again.')
     } finally {
       setLoading(false)
     }

@@ -118,6 +118,8 @@ export default function GitHubProfileAnalyzer() {
     try {
       const qs = new URLSearchParams({ username: u })
       if (withAi) qs.set('insights', '1')
+      if (state.user?.id) qs.set('user_id', state.user.id)
+      
       const res = await fetch(`/api/github/profile?${qs}`, { cache: 'no-store' })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {

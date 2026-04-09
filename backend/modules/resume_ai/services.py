@@ -77,6 +77,7 @@ class ResumeAIService:
 
     def analyze_resume(
         self,
+        user_id: str,
         file_id: str,
         role_target: str,
         target_skills: list[str],
@@ -125,6 +126,14 @@ class ResumeAIService:
                 "ai_provider": provider if provider in {"openai", "gemini"} else "openai",
             }
         )
+        
+        # Cross-module synchronization: Update global roadmap/skills
+        try:
+            from modules.system_ai.sync import sync_resume_insights
+            sync_resume_insights(user_id, result.skill_gap)
+        except Exception as e:
+            print(f"Resume synchronization failed (non-blocking): {e}")
+
         return result
 
     def get_result(self, result_id: str) -> ResumeAnalysisRecord:
@@ -216,5 +225,44 @@ class ResumeAIService:
             )
         return history
 
+
+    def patch_result(self, result_id: str, add_strengths: list[str]) -> ResumeAnalysisRecord:
+        """
+        Enriches an existing resume result with new AI-generated strengths.
+        Boosts the score to reflect the improvement.
+        """
+        existing = (
+            get_supabase_admin_client()
+            .table("resume_results")
+            .select("*")
+            .eq("id", result_id)
+            .limit(1)
+            .execute()
+        )
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="Result not found")
+            
+        row = existing.data[0]
+        strengths = row.get("strengths") or []
+        new_strengths = list(set(strengths + add_strengths))
+        
+        # Performance boost for polishing
+        current_score = int(row.get("score") or 0)
+        new_score = min(100, current_score + (5 if add_strengths else 0))
+        
+        updated = (
+            get_supabase_admin_client()
+            .table("resume_results")
+            .update({
+                "strengths": new_strengths,
+                "score": new_score,
+                "analysis_version": "v2-polished"
+            })
+            .eq("id", result_id)
+            .execute()
+        )
+        
+        # Re-fetch as typed record
+        return self.get_result(result_id)
 
 service = ResumeAIService()

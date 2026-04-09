@@ -5,16 +5,13 @@ from __future__ import annotations
 import os
 
 from fastapi import HTTPException
+from supabase import create_client, Client
+from .config import settings
 
 
-def get_supabase_admin_client():
-    try:
-        from supabase import create_client  # type: ignore
-    except ImportError as exc:  # pragma: no cover
-        raise HTTPException(status_code=500, detail="supabase dependency missing") from exc
-
-    url = os.getenv("SUPABASE_URL")
-    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-    if not url or not service_key:
-        raise HTTPException(status_code=500, detail="SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing")
-    return create_client(url, service_key)
+def get_supabase_admin_client() -> Client:
+    url = settings.SUPABASE_URL
+    key = settings.SUPABASE_SERVICE_ROLE_KEY
+    if not url or not key:
+        raise ValueError("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not configured")
+    return create_client(url, key)

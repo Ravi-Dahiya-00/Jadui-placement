@@ -41,6 +41,29 @@ export default function ChatInterface() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  const buildSystemPrompt = () => {
+    const tech = chatContext.github_tech_stack?.join(', ') || 'modern frameworks'
+    const gaps = topGaps.join(', ') || 'general career metrics'
+    const role = chatContext.targetRole || 'Software Professional'
+    const ghUser = chatContext.githubUsername || 'Candidate'
+
+    return `
+You are Antigravity, the Elite Career Architect and AI Mentor at Jadui Placement. 
+Your goal is to get the user placed in their dream role: ${role}.
+
+TECHNICAL CONTEXT:
+- GitHub Identity: @${ghUser}
+- Primary Tech Stack (Synced from GitHub): ${tech}
+- Current Top Skill Gaps (Synced from Resume/Interview): ${gaps}
+
+MENTORSHIP PRINCIPLES:
+1. BE PROACTIVE: Reference their GitHub repos or Resume gaps if relevant.
+2. BE STRATEGIC: Don't just answer questions; suggest the "Next Best Action" for their roadmap.
+3. ELITE TONE: Professional, high-standards, but supportive.
+4. AGENTIC: You know their progress. If they ask "How am I doing?", refer to their ${tech} skills and ${gaps} gaps.
+`.trim()
+  }
+
   const sendMessage = async (text) => {
     const userMsg = { role: 'user', content: text, timestamp: new Date() }
     dispatch({ type: ACTIONS.ADD_MESSAGE, payload: userMsg })
@@ -52,29 +75,21 @@ export default function ChatInterface() {
         role: m.role === 'assistant' ? 'assistant' : 'user',
         content: typeof m.content === 'string' ? m.content : '',
       }))
+      
       const res = await fetch('/api/mentor/chat', {
         method: 'POST',
         cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          system_prompt: buildSystemPrompt(),
           message: text,
-          history: historyPayload,
-          context: {
-            userId: state.user?.id || 'demo-user',
-            skillGaps: state.skillGaps || [],
-            chatContext,
-            progress: state.progress || {},
-            tasks: state.tasks || [],
-            roadmap: state.roadmap || [],
-            notifications: (state.notifications || []).slice(0, 8),
-            resumeSnapshot,
-          },
+          history: historyPayload
         }),
       })
       const data = await res.json().catch(() => ({}))
       const reply =
         data?.message ||
-        `I could not reach the mentor service (${data?.error || res.statusText || 'error'}). Check **GEMINI_API_KEY** on Vercel and **NEXT_PUBLIC_BACKEND_URL** for dashboard history.`
+        `I could not reach the mentor service (${data?.error || res.statusText || 'error'}). Check **GEMINI_API_KEY** on Vercel.`
       dispatch({
         type: ACTIONS.ADD_MESSAGE,
         payload: { role: 'assistant', content: reply, timestamp: new Date() },
@@ -84,7 +99,7 @@ export default function ChatInterface() {
         type: ACTIONS.ADD_MESSAGE,
         payload: {
           role: 'assistant',
-          content: `**Network error** — ${err?.message || 'Could not reach the mentor'}. Check your connection and try again.`,
+          content: `**Network error** — ${err?.message || 'Could not reach the mentor'}.`,
           timestamp: new Date(),
         },
       })
@@ -128,11 +143,24 @@ export default function ChatInterface() {
           </div>
           <div>
             <p className="text-sm font-semibold text-white">AI Career Mentor</p>
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-              <p className="text-xs text-muted">Online · Context-aware</p>
+            <div className="flex items-center gap-3 mt-1">
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                <p className="text-[10px] text-muted uppercase tracking-wider font-bold">Online</p>
+              </div>
+              
+              <div className="flex items-center gap-2 border-l border-border pl-3">
+                {state.resumeData && (
+                  <span className="text-[9px] bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded uppercase font-bold">📄 Resume Synced</span>
+                )}
+                {chatContext.githubUsername && (
+                  <span className="text-[9px] bg-secondary/10 text-secondary border border-secondary/20 px-1.5 py-0.5 rounded uppercase font-bold">🔗 GitHub Linked</span>
+                )}
+                {state.interviewHistory?.length > 0 && (
+                  <span className="text-[9px] bg-accent/10 text-accent border border-accent/20 px-1.5 py-0.5 rounded uppercase font-bold">🎙️ Interview Data</span>
+                )}
+              </div>
             </div>
-            <p className="text-[11px] text-muted/70 mt-0.5">{sessionLabel} · {archivedCount} archived</p>
           </div>
         </div>
         {messages.length > 0 && (

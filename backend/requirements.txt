@@ -10,3 +10,4 @@ pypdf
 pdfplumber
 python-docx
 supabase
+pydantic-settings

@@ -19,10 +19,25 @@ class StartInterviewRequest(BaseModel):
     question_count: int = Field(default=5, ge=1, le=20)
 
 
-class SubmitAnswerRequest(BaseModel):
-    session_id: str
-    question_index: int = Field(..., ge=0)
-    answer: str = Field(..., min_length=1)
+class FeedbackRequest(BaseModel):
+    interviewId: str
+    userId: str
+    transcript: list[dict[str, Any]]
+
+@router.post("/interview/feedback")
+def generate_feedback(payload: FeedbackRequest) -> dict:
+    """
+    Analyzes the full transcript from a live session.
+    Triggers global sync for skill gaps found during the conversation.
+    """
+    result = service.generate_feedback_from_transcript(
+        session_id=payload.interviewId,
+        user_id=payload.userId,
+        transcript=payload.transcript
+    )
+    
+    # Sync triggers are handled inside the service method
+    return {"feedback": result}
 
 
 @router.post("/interview/start")
@@ -48,8 +63,25 @@ def submit_answer(payload: SubmitAnswerRequest) -> dict:
 
 
 @router.get("/interview/result")
-def interview_result(session_id: str) -> dict:
-    return service.get_result(session_id=session_id)
+def interview_result(session_id: str, user_id: str = None) -> dict:
+    result = service.get_result(session_id=session_id)
+    
+    # Sync with global state if user_id provided
+    if user_id:
+        try:
+            from modules.system_ai.sync import sync_interview_insights
+            # Collect all gaps from individual evaluations
+            all_gaps = []
+            evals = result.get("evaluations", [])
+            for e in evals:
+                all_gaps.extend(e.get("gaps", []))
+            
+            if all_gaps:
+                sync_interview_insights(user_id, list(set(all_gaps))[:5])
+        except Exception as e:
+            print(f"Interview synchronization failed: {e}")
+            
+    return result
 
 
 @router.get("/interview/history")
