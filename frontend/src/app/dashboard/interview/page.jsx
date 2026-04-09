@@ -20,6 +20,7 @@ export default function InterviewPage() {
   const [interviewId, setInterviewId] = useState(null)
   const [feedback,    setFeedback]  = useState(null)
   const [loading,     setLoading]   = useState(false)
+  const [startError,  setStartError] = useState('')
 
   // Vapi Voice Call State
   const [callStatus, setCallStatus] = useState('INACTIVE') // INACTIVE, CONNECTING, ACTIVE, FINISHED
@@ -71,6 +72,7 @@ export default function InterviewPage() {
 
   const handleStart = async () => {
     if (!role) return
+    setStartError('')
     setStage(STAGES.interview)
     setLoading(true)
     setCallStatus('CONNECTING')
@@ -100,7 +102,11 @@ export default function InterviewPage() {
 
       // Start VAPI voice session
       const vapi = getVapi()
-      await vapi.start(process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID, {
+      const assistantId = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID
+      if (!assistantId) {
+        throw new Error('Voice interview is not configured. Missing NEXT_PUBLIC_VAPI_ASSISTANT_ID.')
+      }
+      await vapi.start(assistantId, {
         variableValues: {
           username: state.user?.user_metadata?.full_name || 'Candidate',
           userid: state.user?.id || 'demo-user',
@@ -109,6 +115,7 @@ export default function InterviewPage() {
       })
     } catch (err) {
       console.error('Failed to start interview:', err)
+      setStartError(err?.message || 'Failed to start voice interview. Please try again.')
       setLoading(false)
       setStage(STAGES.select)
     }
@@ -190,6 +197,9 @@ export default function InterviewPage() {
         <p className="text-muted text-sm mt-1">
           Practice role-specific interviews with a real-time Voice AI agent.
         </p>
+        {startError ? (
+          <p className="text-error text-sm mt-2">{startError}</p>
+        ) : null}
       </div>
 
       {/* Stage: Role selection */}
