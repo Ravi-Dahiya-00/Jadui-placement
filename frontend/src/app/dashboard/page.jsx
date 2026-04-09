@@ -1,8 +1,10 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Target, CheckSquare, Mic, Flame, ArrowRight, Sparkles } from 'lucide-react'
+import { Target, CheckSquare, Mic, Flame, ArrowRight, Sparkles, CheckCircle2 } from 'lucide-react'
 import StatCard       from '@/components/dashboard/StatCard'
 import { ProgressBar } from '@/components/ui'
 import { useApp, ACTIONS } from '@/context/AppContext'

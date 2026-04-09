@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Mic, Play, Loader2, PhoneOff, User, Bot, Sparkles, ArrowRight, Volume2 } from 'lucide-react'
 import RoleSelector  from '@/features/interview/RoleSelector'

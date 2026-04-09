@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
+import Image from 'next/image'
 import { useApp, ACTIONS } from '@/context/AppContext'
 import {
   Github,
@@ -284,10 +285,12 @@ export default function GitHubProfileAnalyzer() {
                 </div>
                 
                 <div className="flex-shrink-0 flex flex-col items-center">
-                  <img
+                  <Image
                     src={user.avatarUrl || ''}
-                    alt={user.login}
-                    className="rounded-2xl border-2 border-primary/30 w-32 h-32 object-cover shadow-xl"
+                    alt={user.login || 'GitHub User'}
+                    width={128}
+                    height={128}
+                    className="rounded-2xl border-2 border-primary/30 object-cover shadow-xl"
                   />
                   <div className="mt-4 text-center">
                     <h3 className="text-2xl font-black text-white">{user.login}</h3>

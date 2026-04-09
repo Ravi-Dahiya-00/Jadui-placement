@@ -1,4 +1,4 @@
-import { Trophy, TrendingUp, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react'
+import { Trophy, TrendingUp, AlertTriangle, CheckCircle2, RefreshCw, Sparkles } from 'lucide-react'
 import { ProgressBar, Badge } from '@/components/ui'
 import { cn } from '@/lib/utils'
 
@@ -36,7 +36,7 @@ export default function FeedbackPanel({ feedback, onRestart }) {
           
           {summary && (
             <p className="text-muted text-sm mt-6 max-w-xl mx-auto leading-relaxed font-medium">
-              "{summary}"
+              &quot;{summary}&quot;
             </p>
           )}
 

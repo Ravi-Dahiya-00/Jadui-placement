@@ -10,6 +10,28 @@ export default function ResumeUpload({ onResult, onUploaded }) {
   const { state: { user }, dispatch } = useApp()
   const userId = user?.id || 'default-user'
 
+  const [file, setFile] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [roleTarget, setRoleTarget] = useState('')
+  const [targetSkills, setTargetSkills] = useState('')
+
+  const onDrop = useCallback((acceptedFiles) => {
+    setFile(acceptedFiles[0])
+    setError('')
+  }, [])
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    maxSize: 5 * 1024 * 1024,
+    multiple: false,
+    accept: {
+      'application/pdf': ['.pdf'],
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'text/plain': ['.txt'],
+    },
+  })
+
   const handleUpload = async () => {
     if (!file) return
     setLoading(true)

@@ -2,6 +2,7 @@
 
 import React from "react"
 import { Play } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 export default function InterviewCard({ id, role, type, score, date, summary }) {
     const badgeColor =
