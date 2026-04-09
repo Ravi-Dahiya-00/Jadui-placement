@@ -50,6 +50,58 @@ COMMON_SKILLS = {
 
 
 class ResumeAnalyzer:
+    def _deterministic_quality_audit(self, text: str) -> dict[str, Any]:
+        norm = text.lower()
+        issues: list[str] = []
+        tips: list[str] = []
+
+        if "linkedin.com" not in norm:
+            issues.append("LinkedIn URL missing from personal details.")
+            tips.append("Add a clickable LinkedIn URL in the header.")
+        if "github.com" not in norm:
+            issues.append("GitHub URL missing from personal details.")
+            tips.append("Add a clickable GitHub profile URL.")
+        if "summary" not in norm and "professional summary" not in norm:
+            issues.append("Professional summary section is missing or unclear.")
+            tips.append("Add a 2-3 line summary with target role and backend strengths.")
+
+        weak_phrases = ["passionate", "hardworking", "worked on", "helped with", "responsible for"]
+        weak_hits = [phrase for phrase in weak_phrases if phrase in norm]
+        if weak_hits:
+            issues.append("Generic/weak phrasing detected: " + ", ".join(weak_hits[:3]))
+            tips.append("Replace generic phrases with action + technical impact statements.")
+
+        section_keywords = ["skills", "experience", "projects"]
+        missing_sections = [sec for sec in section_keywords if sec not in norm]
+        if missing_sections:
+            issues.append("Important sections appear missing: " + ", ".join(missing_sections))
+            tips.append("Ensure Skills, Experience, and Projects headings are clearly present.")
+
+        if len(text.split()) < 120:
+            issues.append("Resume content appears too short for a competitive technical profile.")
+            tips.append("Add stronger project depth, APIs/system design contributions, and measurable outcomes.")
+
+        # Conservative score model that avoids unrealistically perfect scores.
+        score = 88 - (len(issues) * 7)
+        score = max(40, min(88, score))
+        return {"issues": issues, "tips": tips[:3], "score": score}
+
+    def _fallback_section_reviews(self, text: str) -> list[dict[str, Any]]:
+        audit = self._deterministic_quality_audit(text)
+        return [
+            {
+                "section": "overall_resume",
+                "bs_factor": min(10, max(1, len(audit["issues"]) + 2)),
+                "issues": audit["issues"][:6],
+                "improved_block": "Rewrite summary using role-first positioning, include backend/API strengths, and remove generic claims.",
+                "justification": ["Generated from deterministic audit because section-wise LLM review is unavailable."],
+                "tips": audit["tips"],
+                "extracted_skills": [],
+                "inferred_role": "",
+                "experience_level": "entry",
+            }
+        ]
+
     def _extract_section(self, text: str, heading_patterns: list[str]) -> str:
         lines = text.splitlines()
         if not lines:
@@ -220,6 +272,9 @@ class ResumeAnalyzer:
         else:
             exp = self.infer_experience_level(cleaned_for_analysis)
         gap = self.compute_skill_gap(skills, target_skills)
+        quality_audit = self._deterministic_quality_audit(cleaned_for_analysis)
+        deterministic_base_score = quality_audit["score"] - (len(gap) * 5)
+        deterministic_base_score = max(35, min(90, deterministic_base_score))
 
         deterministic = {
             "skills": skills,
@@ -229,11 +284,14 @@ class ResumeAnalyzer:
                 "Demonstrates relevant technical stack exposure." if skills else "Resume structure is present.",
                 "Project descriptions show implementation context." if projects else "Profile provides baseline information.",
             ],
-            "weaknesses": ["Missing target skills: " + ", ".join(gap)] if gap else [],
+            "weaknesses": (
+                (["Missing target skills: " + ", ".join(gap)] if gap else [])
+                + quality_audit["issues"][:3]
+            )[:5],
             "recommended_roles": [role_target] if role_target else ["Software Engineer"],
             "skill_gap": gap,
-            "score": max(0, min(100, 100 - (len(gap) * 10))),
-            "section_reviews": [],
+            "score": deterministic_base_score,
+            "section_reviews": self._fallback_section_reviews(cleaned_for_analysis),
         }
 
         if not use_llm:
@@ -241,7 +299,9 @@ class ResumeAnalyzer:
 
         try:
             semantic = self._llm_semantic_analysis(cleaned_for_analysis[:12000], role_target, target_skills)
-            section_reviews = self._llm_section_reviews(cleaned_for_analysis[:12000])
+            section_reviews = self._llm_section_reviews(cleaned_for_analysis[:12000]) or self._fallback_section_reviews(
+                cleaned_for_analysis
+            )
 
             issues: list[str] = []
             tips: list[str] = []
@@ -268,7 +328,7 @@ class ResumeAnalyzer:
             issue_penalty = min(len(issues), 12) * 2
             gap_penalty = min(len(merged_gap), 10) * 5
             bs_penalty = int(avg_bs * 4)
-            computed_score = max(35, min(95, 100 - issue_penalty - gap_penalty - bs_penalty))
+            computed_score = max(35, min(95, deterministic_base_score - issue_penalty - gap_penalty - bs_penalty + 12))
 
             llm_score_raw = semantic.get("score", computed_score)
             try:

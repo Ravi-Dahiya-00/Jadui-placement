@@ -153,7 +153,7 @@ export default function ResumeUpload({ onResult, onUploaded }) {
 
       {loading && (
         <div className="text-center">
-          <p className="text-xs text-muted animate-pulse">AI is parsing your resume with Groq logic. This takes a few seconds...</p>
+          <p className="text-xs text-muted animate-pulse">AI is deeply reviewing resume sections. This can take a few seconds...</p>
         </div>
       )}
     </div>
