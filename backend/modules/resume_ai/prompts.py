@@ -74,6 +74,12 @@ Return STRICT JSON only with this exact shape:
   "inferred_role": "",
   "experience_level": "entry|junior|mid|senior|lead"
 }}
+
+Style constraints for every field:
+- Be direct, strict, and recruiter-focused.
+- No motivational or emotional language.
+- No praise like "great job", "awesome", "excellent profile".
+- Use short, concrete, technical statements.
 """
 
 

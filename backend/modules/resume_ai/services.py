@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from fastapi import HTTPException, UploadFile
 
 from app.core.supabase_client import get_supabase_admin_client
@@ -16,6 +18,20 @@ from .utils import (
 
 
 class ResumeAIService:
+    def _insert_resume_result(self, payload: dict) -> None:
+        supabase = get_supabase_admin_client()
+        try:
+            supabase.table("resume_results").insert(payload).execute()
+        except Exception:
+            # Backward-compatible fallback for DBs without new JSON columns.
+            fallback_payload = {
+                key: value
+                for key, value in payload.items()
+                if key
+                not in {"section_reviews", "detailed_review", "analysis_version", "ai_provider"}
+            }
+            supabase.table("resume_results").insert(fallback_payload).execute()
+
     def _get_file_row(self, file_id: str) -> dict:
         resp = (
             get_supabase_admin_client()
@@ -87,8 +103,10 @@ class ResumeAIService:
             skill_gap=analysis["skill_gap"],
             score=analysis["score"],
             section_reviews=analysis.get("section_reviews") or [],
+            detailed_review=analysis.get("detailed_review") or {},
         )
-        get_supabase_admin_client().table("resume_results").insert(
+        provider = os.getenv("AI_PROVIDER", "openai").strip().lower()
+        self._insert_resume_result(
             {
                 "id": result.result_id,
                 "file_id": result.file_id,
@@ -101,8 +119,12 @@ class ResumeAIService:
                 "recommended_roles": result.recommended_roles,
                 "skill_gap": result.skill_gap,
                 "score": result.score,
+                "section_reviews": result.section_reviews,
+                "detailed_review": result.detailed_review,
+                "analysis_version": "v2",
+                "ai_provider": provider if provider in {"openai", "gemini"} else "openai",
             }
-        ).execute()
+        )
         return result
 
     def get_result(self, result_id: str) -> ResumeAnalysisRecord:
@@ -118,18 +140,22 @@ class ResumeAIService:
         if not rows:
             raise HTTPException(status_code=404, detail="result not found")
         row = rows[0]
-        section_reviews: list[dict] = []
+        section_reviews: list[dict] = row.get("section_reviews") or []
+        detailed_review: dict = row.get("detailed_review") or {}
         try:
-            file_row = self._get_file_row(row.get("file_id", ""))
-            regenerated = analyzer.analyze(
-                resume_text=file_row.get("parsed_text", ""),
-                role_target=row.get("role_target", ""),
-                target_skills=row.get("skill_gap") or [],
-                use_llm=True,
-            )
-            section_reviews = regenerated.get("section_reviews") or []
+            if not section_reviews or not detailed_review:
+                file_row = self._get_file_row(row.get("file_id", ""))
+                regenerated = analyzer.analyze(
+                    resume_text=file_row.get("parsed_text", ""),
+                    role_target=row.get("role_target", ""),
+                    target_skills=row.get("skill_gap") or [],
+                    use_llm=True,
+                )
+                section_reviews = regenerated.get("section_reviews") or []
+                detailed_review = regenerated.get("detailed_review") or {}
         except Exception:
             section_reviews = []
+            detailed_review = {}
 
         return ResumeAnalysisRecord(
             result_id=row["id"],
@@ -144,19 +170,29 @@ class ResumeAIService:
             skill_gap=row.get("skill_gap") or [],
             score=int(row.get("score", 0)),
             section_reviews=section_reviews,
+            detailed_review=detailed_review,
             created_at=row.get("created_at", ""),
         )
 
     def get_history(self, limit: int = 10) -> list[dict]:
         limit = max(1, min(limit, 50))
-        resp = (
-            get_supabase_admin_client()
-            .table("resume_results")
-            .select("id,file_id,role_target,experience_level,score,created_at,resume_files(candidate_name,filename)")
-            .order("created_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
+        supabase = get_supabase_admin_client()
+        try:
+            resp = (
+                supabase.table("resume_results")
+                .select("id,file_id,role_target,experience_level,skills,skill_gap,score,created_at,analysis_version,ai_provider,detailed_review,resume_files(candidate_name,filename)")
+                .order("created_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
+        except Exception:
+            resp = (
+                supabase.table("resume_results")
+                .select("id,file_id,role_target,experience_level,score,created_at,resume_files(candidate_name,filename)")
+                .order("created_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
         rows = resp.data or []
         history: list[dict] = []
         for row in rows:
@@ -172,6 +208,9 @@ class ResumeAIService:
                     "skills": row.get("skills") or [],
                     "skill_gap": row.get("skill_gap") or [],
                     "score": int(row.get("score", 0)),
+                    "ai_analyzed": bool(row.get("detailed_review")),
+                    "analysis_version": row.get("analysis_version", "v1"),
+                    "ai_provider": row.get("ai_provider", ""),
                     "created_at": row.get("created_at", ""),
                 }
             )

@@ -41,7 +41,14 @@ def safe_json_from_text(raw: str) -> dict[str, Any]:
     if raw.startswith("```"):
         raw = raw.strip("`")
         raw = raw.replace("json", "", 1).strip()
-    return json.loads(raw)
+    try:
+        return json.loads(raw)
+    except Exception:
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            return json.loads(raw[start : end + 1])
+        raise
 
 
 @dataclass
@@ -68,6 +75,7 @@ class ResumeAnalysisRecord:
     skill_gap: list[str]
     score: int
     section_reviews: list[dict[str, Any]] = field(default_factory=list)
+    detailed_review: dict[str, Any] = field(default_factory=dict)
     created_at: str = field(default_factory=utc_now_iso)
 
 

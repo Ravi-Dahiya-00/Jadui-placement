@@ -67,6 +67,9 @@ export async function POST(req) {
       recommendations: analysis.recommended_roles || [],
       domain: analysis.experience_level || 'unknown',
       sectionReviews: analysis.section_reviews || [],
+      detailedReview: analysis.detailed_review || {},
+      aiAnalyzed: true,
+      analysisVersion: 'v2',
     }, { status: 200 });
 
   } catch (error) {

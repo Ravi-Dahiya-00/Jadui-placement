@@ -109,12 +109,25 @@ export default function ResumePage() {
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-white">{item.candidate_name || 'Unknown Candidate'}</p>
                   <div className="flex items-center gap-2">
-                    <span
-                      className="text-[11px] px-2 py-0.5 rounded-full border border-primary/30 bg-primary/10 text-primary"
-                      title={item.created_at ? `Exact timestamp: ${new Date(item.created_at).toLocaleString()}` : 'Exact timestamp not available'}
-                    >
-                      AI analyzed
-                    </span>
+                    {item.ai_analyzed ? (
+                      <span
+                        className="text-[11px] px-2 py-0.5 rounded-full border border-primary/30 bg-primary/10 text-primary"
+                        title={
+                          item.created_at
+                            ? `Exact timestamp: ${new Date(item.created_at).toLocaleString()} | Provider: ${item.ai_provider || 'unknown'} | Version: ${item.analysis_version || 'v1'}`
+                            : 'Exact timestamp not available'
+                        }
+                      >
+                        AI analyzed
+                      </span>
+                    ) : (
+                      <span
+                        className="text-[11px] px-2 py-0.5 rounded-full border border-warning/30 bg-warning/10 text-warning"
+                        title="Detailed AI review not persisted for this item yet. Open full review to regenerate."
+                      >
+                        Partial analysis
+                      </span>
+                    )}
                     <p className="text-xs text-muted">{item.score}/100</p>
                   </div>
                 </div>

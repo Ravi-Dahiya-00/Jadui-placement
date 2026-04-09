@@ -33,6 +33,9 @@ export async function GET(req) {
         recommendations: result.recommended_roles || [],
         domain: result.experience_level || 'unknown',
         sectionReviews: result.section_reviews || [],
+        detailedReview: result.detailed_review || {},
+        aiAnalyzed: Boolean(result.detailed_review && Object.keys(result.detailed_review).length > 0),
+        analysisVersion: result.analysis_version || 'v2',
       },
       { status: 200 }
     );

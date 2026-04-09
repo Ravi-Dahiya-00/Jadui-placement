@@ -50,6 +50,43 @@ COMMON_SKILLS = {
 
 
 class ResumeAnalyzer:
+    _SECTION_KEYS = [
+        "personal_summary",
+        "technical_skills",
+        "experience",
+        "projects",
+        "leadership_achievements",
+    ]
+    _BANNED_SOFT_PHRASES = (
+        "great job",
+        "looks amazing",
+        "you are doing awesome",
+        "you’re doing awesome",
+        "good job",
+        "excellent profile",
+        "keep it up",
+        "proud of you",
+    )
+
+    def _sanitize_tone_line(self, text: str) -> str:
+        line = str(text or "").strip()
+        low = line.lower()
+        if any(phrase in low for phrase in self._BANNED_SOFT_PHRASES):
+            return ""
+        # Keep lines short and sharp.
+        if len(line) > 220:
+            line = line[:220].rstrip() + "."
+        return line
+
+    def _sanitize_review_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        cleaned = dict(payload or {})
+        for key in ("issues", "justification", "tips"):
+            vals = cleaned.get(key) or []
+            sanitized = [self._sanitize_tone_line(v) for v in vals]
+            cleaned[key] = [v for v in sanitized if v][:8]
+        cleaned["improved_block"] = self._sanitize_tone_line(cleaned.get("improved_block", ""))
+        return cleaned
+
     def _deterministic_quality_audit(self, text: str) -> dict[str, Any]:
         norm = text.lower()
         issues: list[str] = []
@@ -88,19 +125,93 @@ class ResumeAnalyzer:
 
     def _fallback_section_reviews(self, text: str) -> list[dict[str, Any]]:
         audit = self._deterministic_quality_audit(text)
-        return [
-            {
-                "section": "overall_resume",
-                "bs_factor": min(10, max(1, len(audit["issues"]) + 2)),
-                "issues": audit["issues"][:6],
-                "improved_block": "Rewrite summary using role-first positioning, include backend/API strengths, and remove generic claims.",
-                "justification": ["Generated from deterministic audit because section-wise LLM review is unavailable."],
-                "tips": audit["tips"],
-                "extracted_skills": [],
-                "inferred_role": "",
-                "experience_level": "entry",
-            }
-        ]
+        section_defaults = {
+            "personal_summary": "Add contact links + a 2-3 line role-first summary with technical strengths.",
+            "technical_skills": "Group skills by Languages, Frontend, Backend, Databases, Tools. Remove weak/redundant items.",
+            "experience": "Rewrite bullets in PAR format with measurable engineering impact.",
+            "projects": "Lead with strongest backend/system project and show APIs, DB, and optimization depth.",
+            "leadership_achievements": "Keep only verifiable, high-impact technical achievements.",
+        }
+        reviews: list[dict[str, Any]] = []
+        for section in self._SECTION_KEYS:
+            reviews.append(
+                {
+                    "section": section,
+                    "bs_factor": min(10, max(2, len(audit["issues"]) + 2)),
+                    "issues": audit["issues"][:4] or ["Section lacks technical clarity and recruiter-ready framing."],
+                    "improved_block": section_defaults[section],
+                    "justification": ["Generated from deterministic audit because section-wise LLM review is unavailable."],
+                    "tips": audit["tips"] or ["Use concise, technical, ATS-friendly wording."],
+                    "extracted_skills": [],
+                    "inferred_role": "",
+                    "experience_level": "entry",
+                }
+            )
+        return [self._sanitize_review_payload(r) for r in reviews]
+
+    def _build_detailed_review(
+        self,
+        section_reviews: list[dict[str, Any]],
+        overall_score_100: int,
+    ) -> dict[str, Any]:
+        section_map = {str(s.get("section", "")).strip(): s for s in section_reviews}
+        ordered = [section_map.get(k, {"section": k, "bs_factor": 6, "issues": [], "improved_block": "", "justification": [], "tips": []}) for k in self._SECTION_KEYS]
+        all_issues: list[str] = []
+        all_justifications: list[str] = []
+        all_tips: list[str] = []
+        bs_factors: dict[str, int] = {}
+        rewritten_sections: list[dict[str, str]] = []
+
+        for section in ordered:
+            section = self._sanitize_review_payload(section)
+            key = str(section.get("section", "unknown"))
+            label = key.replace("_", " ").title()
+            try:
+                bs_value = int(section.get("bs_factor", 6))
+            except Exception:
+                bs_value = 6
+            bs_factors[label] = max(1, min(10, bs_value))
+            all_issues.extend([str(i) for i in (section.get("issues") or []) if str(i).strip()])
+            all_justifications.extend([str(i) for i in (section.get("justification") or []) if str(i).strip()])
+            all_tips.extend([str(i) for i in (section.get("tips") or []) if str(i).strip()])
+            improved = str(section.get("improved_block", "")).strip()
+            if improved:
+                rewritten_sections.append({"section": label, "content": improved})
+
+        unique_issues = [self._sanitize_tone_line(i) for i in list(dict.fromkeys(all_issues))[:10]]
+        unique_issues = [i for i in unique_issues if i]
+        unique_justifications = [self._sanitize_tone_line(i) for i in list(dict.fromkeys(all_justifications))[:6]]
+        unique_justifications = [i for i in unique_justifications if i]
+        unique_tips = [self._sanitize_tone_line(i) for i in list(dict.fromkeys(all_tips))[:4]]
+        unique_tips = [i for i in unique_tips if i]
+        overall_score_10 = round(max(1.0, min(10.0, overall_score_100 / 10.0)), 1)
+        avg_bs = sum(bs_factors.values()) / max(1, len(bs_factors))
+        if overall_score_10 >= 7.5:
+            competitive = "Above average profile for startups; needs sharper impact language for top-tier screening."
+        elif overall_score_10 >= 6:
+            competitive = "Average profile in current pool; credible but not differentiated enough for strong shortlist conversion."
+        else:
+            competitive = "Below competitive threshold right now; weak positioning and section depth will hurt shortlist chances."
+
+        return {
+            "brutal_assessment": {
+                "overall_score_out_of_10": overall_score_10,
+                "section_wise_bs_factor": bs_factors,
+                "clear_flaws": unique_issues,
+            },
+            "optimized_output": rewritten_sections,
+            "justification": unique_justifications or [
+                "Weak phrasing reduced clarity.",
+                "Technical impact was not visible enough for recruiter scan speed.",
+                "Sections were rewritten for ATS readability and credibility.",
+            ],
+            "competitive_insight": competitive + f" Current BS intensity: {avg_bs:.1f}/10.",
+            "actionable_next_steps": unique_tips or [
+                "Rewrite summary with role + backend/API depth in 2-3 lines.",
+                "Convert experience bullets to measurable impact.",
+                "Reorder projects by technical depth and interview defensibility.",
+            ],
+        }
 
     def _extract_section(self, text: str, heading_patterns: list[str]) -> str:
         lines = text.splitlines()
@@ -217,7 +328,7 @@ class ResumeAnalyzer:
             try:
                 data = self._llm_json(prompt)
                 if isinstance(data, dict):
-                    reviews.append(data)
+                    reviews.append(self._sanitize_review_payload(data))
             except Exception:
                 continue
         return reviews
@@ -229,9 +340,10 @@ class ResumeAnalyzer:
         target_skills: list[str],
         use_llm: bool = True,
     ) -> dict[str, Any]:
-        cleaned = normalize_space(resume_text)
+        raw_resume_text = resume_text or ""
+        cleaned = normalize_space(raw_resume_text)
         cleanup_payload: dict[str, Any] = {}
-        cleaned_for_analysis = cleaned
+        cleaned_for_analysis = raw_resume_text
         llm_skills_hint: list[str] = []
         llm_projects_hint: list[str] = []
         llm_experience_years = 0
@@ -239,9 +351,9 @@ class ResumeAnalyzer:
         if use_llm:
             try:
                 cleanup_payload = self._llm_cleanup_resume(cleaned[:12000])
-                cleaned_for_analysis = normalize_space(
+                cleaned_for_analysis = str(
                     str(cleanup_payload.get("normalized_text", cleaned))
-                ) or cleaned
+                ) or raw_resume_text
                 llm_skills_hint = [
                     str(item).strip().lower()
                     for item in (cleanup_payload.get("skills") or [])
@@ -254,9 +366,9 @@ class ResumeAnalyzer:
                 ]
                 llm_experience_years = int(cleanup_payload.get("experience_years", 0) or 0)
             except Exception:
-                cleaned_for_analysis = cleaned
+                cleaned_for_analysis = raw_resume_text
 
-        deterministic_skills = self.extract_skills(cleaned_for_analysis)
+        deterministic_skills = self.extract_skills(normalize_space(cleaned_for_analysis))
         skills = sorted(set(deterministic_skills + llm_skills_hint))
         projects = (self.extract_projects(cleaned_for_analysis) + llm_projects_hint)[:5]
         if llm_experience_years > 0:
@@ -270,7 +382,7 @@ class ResumeAnalyzer:
                 else "junior"
             )
         else:
-            exp = self.infer_experience_level(cleaned_for_analysis)
+            exp = self.infer_experience_level(normalize_space(cleaned_for_analysis))
         gap = self.compute_skill_gap(skills, target_skills)
         quality_audit = self._deterministic_quality_audit(cleaned_for_analysis)
         deterministic_base_score = quality_audit["score"] - (len(gap) * 5)
@@ -293,12 +405,15 @@ class ResumeAnalyzer:
             "score": deterministic_base_score,
             "section_reviews": self._fallback_section_reviews(cleaned_for_analysis),
         }
+        deterministic["detailed_review"] = self._build_detailed_review(
+            deterministic["section_reviews"], deterministic["score"]
+        )
 
         if not use_llm:
             return deterministic
 
         try:
-            semantic = self._llm_semantic_analysis(cleaned_for_analysis[:12000], role_target, target_skills)
+            semantic = self._llm_semantic_analysis(normalize_space(cleaned_for_analysis)[:12000], role_target, target_skills)
             section_reviews = self._llm_section_reviews(cleaned_for_analysis[:12000]) or self._fallback_section_reviews(
                 cleaned_for_analysis
             )
@@ -337,7 +452,7 @@ class ResumeAnalyzer:
                 llm_score = computed_score
             final_score = max(35, min(95, int((computed_score * 0.6) + (llm_score * 0.4))))
 
-            return {
+            response = {
                 "skills": merged_skills,
                 "projects": projects,
                 "experience_level": semantic.get("experience_level", deterministic["experience_level"]),
@@ -352,6 +467,8 @@ class ResumeAnalyzer:
                 "score": final_score,
                 "section_reviews": section_reviews[:5],
             }
+            response["detailed_review"] = self._build_detailed_review(response["section_reviews"], response["score"])
+            return response
         except Exception:
             return deterministic
 

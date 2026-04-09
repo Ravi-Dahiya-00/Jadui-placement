@@ -11,7 +11,15 @@ export default function ResumeResults({ data }) {
     score = 0,
     domain = '',
     sectionReviews = [],
+    detailedReview = {},
   } = data
+  const brutal = detailedReview?.brutal_assessment || {}
+  const sectionBs = brutal?.section_wise_bs_factor || {}
+  const clearFlaws = brutal?.clear_flaws || []
+  const optimizedOutput = detailedReview?.optimized_output || []
+  const justifications = detailedReview?.justification || []
+  const competitiveInsight = detailedReview?.competitive_insight || ''
+  const nextSteps = detailedReview?.actionable_next_steps || []
 
   return (
     <div className="space-y-6 animate-slide-up">
@@ -147,6 +155,81 @@ export default function ResumeResults({ data }) {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Final standard detailed report */}
+      {(Object.keys(brutal).length > 0 || optimizedOutput.length > 0) && (
+        <div className="bg-card border border-border rounded-xl p-5 space-y-5">
+          <h4 className="font-semibold text-white">FINAL STANDARD AI REVIEW</h4>
+
+          <div className="rounded-lg border border-border p-4 bg-surface/40 space-y-3">
+            <p className="text-sm font-semibold text-white">1. BRUTAL ASSESSMENT</p>
+            <p className="text-sm text-muted">
+              Overall Score: {Number(brutal?.overall_score_out_of_10 || 0).toFixed(1)}/10
+            </p>
+            {Object.keys(sectionBs).length > 0 && (
+              <div>
+                <p className="text-xs text-muted mb-1">Section-wise BS Factor</p>
+                <ul className="space-y-1">
+                  {Object.entries(sectionBs).map(([key, val]) => (
+                    <li key={key} className="text-sm text-muted">- {key}: {val}/10</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {clearFlaws.length > 0 && (
+              <div>
+                <p className="text-xs text-muted mb-1">Clear flaws</p>
+                <ul className="space-y-1">
+                  {clearFlaws.map((item, idx) => (
+                    <li key={idx} className="text-sm text-muted">- {item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {optimizedOutput.length > 0 && (
+            <div className="rounded-lg border border-border p-4 bg-surface/40 space-y-3">
+              <p className="text-sm font-semibold text-white">2. OPTIMIZED OUTPUT (REWRITE)</p>
+              {optimizedOutput.map((item, idx) => (
+                <div key={`${item.section || 'section'}-${idx}`} className="space-y-1">
+                  <p className="text-xs text-primary">{item.section || 'Section'}</p>
+                  <p className="text-sm text-white whitespace-pre-wrap leading-relaxed">{item.content}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {justifications.length > 0 && (
+            <div className="rounded-lg border border-border p-4 bg-surface/40 space-y-2">
+              <p className="text-sm font-semibold text-white">3. JUSTIFICATION</p>
+              <ul className="space-y-1">
+                {justifications.map((item, idx) => (
+                  <li key={idx} className="text-sm text-muted">- {item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {competitiveInsight ? (
+            <div className="rounded-lg border border-border p-4 bg-surface/40 space-y-1">
+              <p className="text-sm font-semibold text-white">4. COMPETITIVE INSIGHT</p>
+              <p className="text-sm text-muted">{competitiveInsight}</p>
+            </div>
+          ) : null}
+
+          {nextSteps.length > 0 && (
+            <div className="rounded-lg border border-border p-4 bg-surface/40 space-y-2">
+              <p className="text-sm font-semibold text-white">5. ACTIONABLE NEXT STEPS</p>
+              <ul className="space-y-1">
+                {nextSteps.slice(0, 4).map((item, idx) => (
+                  <li key={idx} className="text-sm text-muted">- {item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>
