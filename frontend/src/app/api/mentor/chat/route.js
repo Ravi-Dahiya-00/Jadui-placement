@@ -6,10 +6,68 @@ function backendUrl() {
   return process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL || ''
 }
 
+async function fetchSystemState(userId) {
+  const base = backendUrl()
+  if (!base || !userId) return null
+  try {
+    const res = await fetch(`${base}/system/state?user_id=${encodeURIComponent(userId)}`, {
+      method: 'GET',
+      cache: 'no-store',
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return data?.state ?? data
+  } catch {
+    return null
+  }
+}
+
 /**
- * Pull fresh resume + interview rows from the FastAPI backend so the mentor
- * reasons over real history, not only the client snapshot.
+ * Client React state can be empty on first paint; merge Supabase-backed `user_system_state`
+ * so scores and tasks are not all zeros.
  */
+function mergeNum(clientVal, serverVal) {
+  const c = Number(clientVal)
+  const s = Number(serverVal)
+  if (Number.isFinite(s) && s > 0 && (!Number.isFinite(c) || c === 0)) return s
+  if (Number.isFinite(c) && c > 0) return c
+  return Number.isFinite(s) ? s : Number.isFinite(c) ? c : 0
+}
+
+function mergeDashboardContext(clientContext, serverState) {
+  if (!serverState) return clientContext
+  const cc = serverState.chat_context || {}
+  const clientCc = clientContext.chatContext || {}
+  const sr = cc.avgResumeScore ?? cc.avg_resume_score
+  const si = cc.avgInterviewScore ?? cc.avg_interview_score
+  const mergedCc = {
+    ...clientCc,
+    avgResumeScore: mergeNum(clientCc.avgResumeScore, sr),
+    avgInterviewScore: mergeNum(clientCc.avgInterviewScore, si),
+    latestRoleTarget:
+      clientCc.latestRoleTarget ||
+      cc.latestRoleTarget ||
+      cc.latest_role_target ||
+      '',
+    topSkillGaps:
+      clientContext.skillGaps?.length > 0
+        ? clientContext.skillGaps
+        : cc.topSkillGaps || cc.top_skill_gaps || [],
+  }
+  return {
+    ...clientContext,
+    skillGaps:
+      clientContext.skillGaps?.length > 0 ? clientContext.skillGaps : serverState.skill_gaps || [],
+    tasks: clientContext.tasks?.length > 0 ? clientContext.tasks : serverState.tasks || [],
+    roadmap: clientContext.roadmap?.length > 0 ? clientContext.roadmap : serverState.roadmap || [],
+    notifications:
+      clientContext.notifications?.length > 0
+        ? clientContext.notifications
+        : (serverState.notifications || []).slice(0, 8),
+    chatContext: mergedCc,
+  }
+}
+
 async function fetchDashboardSnapshot(userId) {
   const base = backendUrl()
   if (!base) return { resumeRows: [], interviewRows: [], error: 'no_backend' }
@@ -55,7 +113,9 @@ function buildSystemPrompt({ context, resumeRows, interviewRows, resumeSnapshot 
   const progress = context?.progress || {}
   const tasks = (context?.tasks || []).slice(0, 24)
   const roadmap = (context?.roadmap || []).slice(0, 7)
-  const gaps = context?.skillGaps || cc.topSkillGaps || []
+  const gaps = context?.skillGaps?.length
+    ? context.skillGaps
+    : cc.topSkillGaps || []
 
   const taskLines = tasks
     .map((t) => `- [${t.completed ? 'x' : ' '}] ${t.title} (${t.category || 'Task'}, ${t.due || 'soon'})`)
@@ -75,7 +135,7 @@ function buildSystemPrompt({ context, resumeRows, interviewRows, resumeSnapshot 
 Current resume analysis snapshot (latest session in browser):
 - Overall score: ${s.score ?? s.overall_score ?? 'n/a'}
 - Target role: ${s.role_target || s.targetRole || cc.latestRoleTarget || 'n/a'}
-- Summary line: ${String(s.summary || s.detailed_review?.slice?.(0, 400) || s.overall_feedback || '').slice(0, 600)}
+- Summary line: ${String(s.summary || (typeof s.detailed_review === 'string' ? s.detailed_review.slice(0, 400) : '') || s.overall_feedback || '').slice(0, 600)}
 `
   }
 
@@ -106,30 +166,93 @@ ${interviewsFromDb}
 ${resumeExtra}
 
 ## Response rules
+- **Answer the user's latest question directly first** — different questions must get different structure and content. Never repeat a prior answer verbatim.
 - Reference concrete numbers (scores, counts, gap names) when relevant.
-- Tie recommendations to their tasks and roadmap (e.g. "finish the System Design task due Tomorrow before adding new DSA volume").
+- Tie recommendations to their tasks and roadmap when those exist.
 - If data is thin, say what is missing and suggest one measurable next step.
-- Prefer short sections: **Key insight**, **This week**, **Next actions** (bullet points).
-- Be encouraging but honest; no filler. Max ~450 words unless the user asks for a long plan.
+- Prefer short sections with **bold** headings. Be concise unless they ask for a long plan.
 - Do not claim you "stored" data or "updated the database".`
 }
 
+/**
+ * When Gemini is unavailable, still vary copy by intent and include the actual question.
+ */
 function fallbackReply(message, context, resumeRows, interviewRows) {
+  const q = (message || '').toLowerCase()
   const cc = context?.chatContext || {}
-  const gaps = (context?.skillGaps || []).slice(0, 5).join(', ') || 'core CS, system design, communication'
-  const avgR = cc.avgResumeScore ?? 0
-  const avgI = cc.avgInterviewScore ?? 0
+  const tasks = context?.tasks || []
+  const roadmap = context?.roadmap || []
+  const gaps = context?.skillGaps?.length ? context.skillGaps : cc.topSkillGaps || []
+  const gapStr = gaps.slice(0, 5).join(', ') || 'problem-solving, communication, system fundamentals'
+  const avgR = Number(cc.avgResumeScore) || 0
+  const avgI = Number(cc.avgInterviewScore) || 0
   const latestIv = interviewRows?.[0]
   const latestRe = resumeRows?.[0]
+  const pending = tasks.filter((t) => !t.completed).slice(0, 3)
+
+  const dataLine = `**Your data:** resume avg **${avgR}**/100 · interview avg **${avgI}**/100 · gaps: ${gapStr}. `
+
+  if (/7[\s-]*day|seven day|week plan|roadmap/i.test(q)) {
+    const days = roadmap.length ? roadmap : []
+    const gList = gaps.length ? gaps : gapStr.split(',').map((s) => s.trim()).filter(Boolean)
+    const pickGap = (n) => gList[n % Math.max(gList.length, 1)] || 'your priority skill'
+    const lines = days.length
+      ? days.slice(0, 7).map((d, i) => `**Day ${i + 1} (${d.day}):** ${(d.tasks || []).slice(0, 2).join(' · ') || 'Focus on top gap + one measurable deliverable.'}`)
+      : [1, 2, 3, 4, 5, 6, 7].map(
+          (n) =>
+            `**Day ${n}:** 60m on **${pickGap(n - 1)}** · 30m review · 1 short write-up of what changed`
+        )
+    return (
+      `You asked: "${message.slice(0, 200)}"\n\n` +
+      dataLine +
+      (latestRe ? `Latest resume run: **${latestRe.score}**/100 (${latestRe.role_target || 'role'}). ` : '') +
+      (latestIv ? `Latest mock interview: **${latestIv.overall_score}**/100 (${latestIv.role || 'role'}). ` : '') +
+      `\n\n**7-day roadmap (aligned to your profile)**\n\n${lines.join('\n\n')}\n\n` +
+      `_Enable **GEMINI_API_KEY** on the server for richer, adaptive planning._`
+    )
+  }
+
+  if (/this week|focus|priorit/i.test(q)) {
+    const next = pending.length
+      ? pending.map((t) => `• **${t.title}** (${t.due || 'soon'})`).join('\n')
+      : `• Deep work on **${gaps[0] || 'your weakest area'}** (90m)\n• One timed mock answer with metrics\n• One resume bullet with numbers`
+    return (
+      `You asked: "${message.slice(0, 200)}"\n\n` +
+      dataLine +
+      `\n**This week — do these first:**\n${next}\n\n` +
+      `_Add **GEMINI_API_KEY** for full AI coaching._`
+    )
+  }
+
+  if (/interview|score|mock/i.test(q)) {
+    return (
+      `You asked: "${message.slice(0, 200)}"\n\n` +
+      dataLine +
+      (latestIv
+        ? `Latest session: **${latestIv.overall_score}**/100, ${latestIv.answered_count || 0}/${latestIv.total_questions || '?'} answered (${latestIv.role}). `
+        : 'No mock interview history in the database yet — schedule one in the dashboard. ') +
+      `\n\n**To raise interview scores:** use STAR/PAR, name trade-offs, add one metric per story, and do one full mock every 2–3 days.\n\n` +
+      `_GEMINI_API_KEY_ unlocks line-by-line feedback style answers._`
+    )
+  }
+
+  if (/improve|skill|gap/i.test(q)) {
+    const top = gaps[0] || 'your weakest listed skill'
+    return (
+      `You asked: "${message.slice(0, 200)}"\n\n` +
+      dataLine +
+      `\n**Improving ${top}:**\n• One focused block daily (45–90m)\n• One small project or LeetCode/design prompt with a written retrospective\n• Teach it back in one paragraph (Feynman-style)\n\n` +
+      `_Full personalization needs **GEMINI_API_KEY**._`
+    )
+  }
+
   return (
-    `**Key insight** — Your dashboard shows resume avg **${avgR}**/100 and interview avg **${avgI}**/100. ` +
-    (latestIv
-      ? `Latest mock: **${latestIv.overall_score ?? '?'}**/100 (${latestIv.role || 'role'}). `
-      : '') +
-    (latestRe ? `Latest resume run: **${latestRe.score ?? '?'}/100** (${latestRe.role_target || 'target role'}). ` : '') +
-    `**Priority gaps:** ${gaps}. ` +
-    `**Next actions:** (1) One deep practice block on the top gap, (2) one timed mock focusing on structure and metrics, (3) tighten one resume bullet with a measurable outcome. ` +
-    `(AI mentor offline: add **GEMINI_API_KEY** to enable full Gemini analysis.)`
+    `You asked: "${message.slice(0, 200)}"\n\n` +
+    dataLine +
+    (latestRe ? `Latest resume: **${latestRe.score}**/100 (${latestRe.role_target || 'role'}). ` : '') +
+    (latestIv ? `Latest interview: **${latestIv.overall_score}**/100. ` : '') +
+    `\n\n**Suggestions:** pick one gap from above, tie it to a task or roadmap day, and measure one outcome (score, time, or artifact) by end of week.\n\n` +
+    `_Set **GEMINI_API_KEY** for natural, conversational answers._`
   )
 }
 
@@ -138,12 +261,15 @@ export async function POST(request) {
     const body = await request.json()
     const message = String(body?.message || '').trim()
     const history = Array.isArray(body?.history) ? body.history : []
-    const context = body?.context || {}
+    let context = body?.context || {}
     const userId = context?.userId || 'demo-user'
 
     if (!message) {
       return NextResponse.json({ error: 'message is required' }, { status: 400 })
     }
+
+    const serverState = await fetchSystemState(userId)
+    context = mergeDashboardContext(context, serverState)
 
     const { resumeRows, interviewRows } = await fetchDashboardSnapshot(userId)
 
@@ -178,8 +304,15 @@ export async function POST(request) {
     const { text } = await generateText({
       model: google(modelId),
       system,
-      messages: [...prior, { role: 'user', content: message.slice(0, 8000) }],
-      temperature: 0.65,
+      messages: [
+        ...prior,
+        {
+          role: 'user',
+          content:
+            `Latest question (answer this specifically; do not repeat generic advice):\n"""${message.slice(0, 8000)}"""`,
+        },
+      ],
+      temperature: 0.88,
       maxOutputTokens: 2048,
     })
 
@@ -193,8 +326,8 @@ export async function POST(request) {
     return NextResponse.json(
       {
         message:
-          '**Something went wrong** calling the AI. Check that `GEMINI_API_KEY` is set for this deployment, then try again. ' +
-          `(${msg})`,
+          '**Something went wrong** calling the AI. Check that `GEMINI_API_KEY` is valid and `GEMINI_MODEL` matches your account. ' +
+          `Details: ${msg}`,
         usedAI: false,
         error: msg,
       },

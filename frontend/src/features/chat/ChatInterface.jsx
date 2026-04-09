@@ -54,6 +54,7 @@ export default function ChatInterface() {
       }))
       const res = await fetch('/api/mentor/chat', {
         method: 'POST',
+        cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: text,
