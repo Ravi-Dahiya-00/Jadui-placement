@@ -24,7 +24,14 @@ def safe_json_loads(raw: str) -> dict[str, Any]:
     fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", raw, re.DOTALL)
     if fenced:
         raw = fenced.group(1)
-    return json.loads(raw)
+    try:
+        return json.loads(raw)
+    except Exception:
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            return json.loads(raw[start : end + 1])
+        raise
 
 
 def clamp_score(value: float | int) -> int:

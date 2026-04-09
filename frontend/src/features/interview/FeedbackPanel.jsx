@@ -89,6 +89,13 @@ export default function FeedbackPanel({ feedback, onRestart }) {
                   </Badge>
                 </div>
                 <p className="text-xs text-muted leading-relaxed">{a.feedback}</p>
+                {Array.isArray(a.suggestions) && a.suggestions.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {a.suggestions.slice(0, 2).map((s, idx) => (
+                      <li key={idx} className="text-[11px] text-muted">- {s}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
             ))}
           </div>

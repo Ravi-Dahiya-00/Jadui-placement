@@ -69,21 +69,65 @@ class InterviewAIService:
         return base[:question_count]
 
     def _fallback_evaluation(self, question: str, answer: str, skills: list[str]) -> dict[str, Any]:
+        answer_l = answer.lower()
         answer_words = len(answer.split())
-        keyword_hits = sum(1 for skill in skills if skill.lower() in answer.lower())
-        clarity = 35 if answer_words < 15 else 65 if answer_words < 40 else 80
-        relevance = 50 + min(keyword_hits * 10, 30)
-        correctness = 55 if answer_words < 12 else 70
+        keyword_hits = sum(1 for skill in skills if skill.lower() in answer_l)
+        has_structure = any(token in answer_l for token in ["first", "then", "finally", "because", "therefore"])
+        has_metrics = bool(any(ch.isdigit() for ch in answer) or "%" in answer)
+        has_debug_terms = any(token in answer_l for token in ["logs", "metrics", "trace", "rollback", "monitor"])
+
+        clarity = 35 if answer_words < 15 else 62 if answer_words < 35 else 78
+        if has_structure:
+            clarity += 6
+        relevance = 45 + min(keyword_hits * 12, 30)
+        if "debug" in question.lower() and has_debug_terms:
+            relevance += 10
+        correctness = 50 if answer_words < 12 else 66
+        if has_metrics:
+            correctness += 8
+
+        strengths: list[str] = []
+        if has_structure:
+            strengths.append("Answer has a visible structure and logical flow.")
+        if keyword_hits > 0:
+            strengths.append("Response references role-relevant technologies.")
+        if has_metrics:
+            strengths.append("Includes measurable signal, improving credibility.")
+        if not strengths:
+            strengths.append("Basic relevance is present, but depth is limited.")
+
+        gaps: list[str] = []
+        if not has_structure:
+            gaps.append("Lacks clear structure (context -> action -> result).")
+        if not has_metrics:
+            gaps.append("Missing measurable impact (latency, throughput, reliability, % improvement).")
+        if keyword_hits == 0 and skills:
+            gaps.append("Does not connect answer to expected skill stack.")
+
+        q_lower = question.lower()
+        if "debug" in q_lower:
+            model_hint = "A strong answer should cover reproduction, hypothesis, logs/metrics, root cause, fix, and prevention."
+        elif "challenging problem" in q_lower:
+            model_hint = "A strong answer should state problem constraints, design decision, trade-off, and measurable outcome."
+        else:
+            model_hint = "A strong answer should include context, technical implementation detail, and quantifiable result."
+
         return {
-            "correctness": correctness,
-            "clarity": clarity,
-            "relevance": relevance,
-            "feedback": f"Your answer to '{question}' is a good start, but add more specific technical depth.",
+            "correctness": clamp_score(correctness),
+            "clarity": clamp_score(clarity),
+            "relevance": clamp_score(relevance),
+            "feedback": (
+                f"For '{question}', your response covers basics but lacks interview-grade depth. "
+                "Add implementation detail, explicit trade-offs, and quantified impact."
+            ),
+            "strengths": strengths[:3],
+            "gaps": gaps[:3],
             "suggestions": [
-                "Use STAR or a structured format.",
-                "Include measurable impact from your work.",
-                "Reference concrete tools, constraints, and outcomes.",
+                "Use PAR/STAR structure: problem, action, result.",
+                "Mention concrete tools, architecture choices, and constraints.",
+                "Add one measurable metric to prove impact.",
             ],
+            "model_answer_hint": model_hint,
         }
 
     def _get_session_row(self, session_id: str) -> dict[str, Any]:
@@ -186,8 +230,18 @@ class InterviewAIService:
         clarity = clamp_score(data.get("clarity", 0))
         relevance = clamp_score(data.get("relevance", 0))
         overall = clamp_score(mean([correctness, clarity, relevance]))
-        feedback = str(data.get("feedback", "")).strip() or "Keep improving answer structure and technical clarity."
-        suggestions = [str(item) for item in data.get("suggestions", [])][:5]
+        feedback = str(data.get("feedback", "")).strip() or "Answer needs stronger technical depth and structure."
+        strengths = [str(item).strip() for item in data.get("strengths", []) if str(item).strip()][:3]
+        gaps = [str(item).strip() for item in data.get("gaps", []) if str(item).strip()][:3]
+        suggestions = [str(item).strip() for item in data.get("suggestions", []) if str(item).strip()][:5]
+        model_answer_hint = str(data.get("model_answer_hint", "")).strip()
+        if strengths:
+            feedback = f"{feedback} Strength: {strengths[0]}"
+        if gaps:
+            feedback = f"{feedback} Gap: {gaps[0]}"
+        if model_answer_hint:
+            suggestions = suggestions + [f"Model answer hint: {model_answer_hint}"]
+        suggestions = suggestions[:5]
 
         evaluation = AnswerEvaluation(
             correctness=correctness,

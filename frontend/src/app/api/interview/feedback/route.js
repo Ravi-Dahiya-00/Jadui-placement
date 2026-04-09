@@ -42,24 +42,39 @@ export async function POST(req) {
 
     const evaluations = resultData.evaluations || [];
     const overall = resultData?.scores?.overall || 0;
-    const strengths = evaluations
-      .filter((e) => Number(e.overall || 0) >= 70)
+    const sortedByScore = [...evaluations].sort((a, b) => Number(b.overall || 0) - Number(a.overall || 0));
+    const strengths = sortedByScore
+      .filter((e) => Number(e.overall || 0) >= 65)
       .slice(0, 3)
-      .map((e) => `Strong response on: ${e.question}`);
+      .map((e) => {
+        const tags = [];
+        if (Number(e.clarity || 0) >= 70) tags.push('clarity');
+        if (Number(e.correctness || 0) >= 70) tags.push('correctness');
+        if (Number(e.relevance || 0) >= 70) tags.push('relevance');
+        const tagText = tags.length ? ` (${tags.join(', ')})` : '';
+        return `Strong signal on "${e.question}"${tagText}.`;
+      });
+
     const improvements = evaluations
       .filter((e) => Number(e.overall || 0) < 70)
-      .slice(0, 3)
-      .map((e) => e.feedback || `Improve answer for: ${e.question}`);
+      .slice(0, 4)
+      .map((e) => {
+        const hint = Array.isArray(e.suggestions)
+          ? e.suggestions.find((s) => String(s).toLowerCase().includes('model answer hint'))
+          : '';
+        return `${e.feedback || `Improve answer for: ${e.question}`}${hint ? ` ${hint}` : ''}`;
+      });
 
     const mappedFeedback = {
       score: overall,
       summary: resultData.summary_feedback || 'Interview analysis completed.',
-      strengths: strengths.length ? strengths : ['Consistent participation in the interview session.'],
-      improvements: improvements.length ? improvements : ['Provide more detailed and structured responses.'],
+      strengths: strengths.length ? strengths : ['You completed the session; next focus is improving evidence depth and structure.'],
+      improvements: improvements.length ? improvements : ['Improve technical depth: include architecture decisions, constraints, and measurable impact.'],
       answers: evaluations.map((e) => ({
         question: e.question,
         score: e.overall,
         feedback: e.feedback,
+        suggestions: e.suggestions || [],
       })),
     };
 

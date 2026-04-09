@@ -31,7 +31,7 @@ Return strict JSON only in this format:
 
 def answer_evaluation_prompt(question: str, answer: str, role: str, skills: list[str]) -> str:
     return f"""
-You are evaluating a candidate interview response.
+You are a strict senior interviewer evaluating one candidate response.
 
 Target role: {role}
 Skills focus: {", ".join(skills) if skills else "Not specified"}
@@ -43,15 +43,25 @@ Evaluate with 0-100 scores for:
 - clarity
 - relevance
 
+Judgement rules:
+- Be direct and evidence-based
+- No motivational filler
+- Penalize vague claims without implementation details
+- Reward concrete examples, architecture reasoning, debugging method, and measurable impact
+
 Return strict JSON only:
 {{
   "correctness": 0,
   "clarity": 0,
   "relevance": 0,
-  "feedback": "short actionable feedback",
+  "feedback": "2-3 line detailed actionable feedback",
+  "strengths": ["specific strong point 1", "specific strong point 2"],
+  "gaps": ["specific gap 1", "specific gap 2"],
   "suggestions": [
-    "suggestion 1",
-    "suggestion 2"
-  ]
+    "specific improvement step 1",
+    "specific improvement step 2",
+    "specific improvement step 3"
+  ],
+  "model_answer_hint": "1-2 line example of what a stronger answer would include"
 }}
 """
