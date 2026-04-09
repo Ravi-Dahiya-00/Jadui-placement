@@ -41,6 +41,7 @@ export default function DashboardPage() {
   const [generatingPlan, setGeneratingPlan] = useState(false)
   const [syncStatus, setSyncStatus] = useState('idle') // idle | syncing | synced | error
   const [lastSyncedAt, setLastSyncedAt] = useState('')
+  const [isMounted, setIsMounted] = useState(false)
 
   const todayTasks  = tasks.filter((t) => t.due === 'Today')
   const completedToday = todayTasks.filter((t) => t.completed).length
@@ -66,6 +67,7 @@ export default function DashboardPage() {
       }
     }
     loadStats()
+    setIsMounted(true)
   }, [])
 
   const [readinessData, setReadinessData] = useState(null)
@@ -316,31 +318,44 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
+    <div className={`max-w-7xl mx-auto space-y-8 transition-opacity duration-500 ${isMounted ? 'opacity-100' : 'opacity-0'}`}>
       {/* Greeting */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">
-          Good {getGreeting()},{' '}
-          <span className="gradient-text-primary">
-            {state.user?.user_metadata?.full_name?.split(' ')[0] || 'there'} 👋
-          </span>
-        </h1>
-        <p className="text-muted text-sm mt-1">Here&apos;s your placement readiness snapshot for today.</p>
-        <p className={cn(
-          'text-xs mt-1',
-          syncStatus === 'synced' && 'text-success',
-          syncStatus === 'syncing' && 'text-primary',
-          syncStatus === 'error' && 'text-error',
-          syncStatus === 'idle' && 'text-muted'
-        )}>
-          {syncStatus === 'syncing'
-            ? 'Syncing dashboard state...'
-            : syncStatus === 'error'
-            ? 'Sync failed. Changes will retry automatically.'
-            : lastSyncedAt
-            ? `Last synced at ${new Date(lastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-            : 'Sync status not available yet.'}
-        </p>
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black text-white tracking-tight">
+            Good {isMounted ? getGreeting() : '...'},{' '}
+            <span className="gradient-text-primary">
+              {state.user?.user_metadata?.full_name?.split(' ')[0] || 'Candidate'} 👋
+            </span>
+          </h1>
+          <p className="text-muted text-sm mt-1 font-medium italic opacity-80">
+            Insights synced and parsed by Jadui Intelligence Layer.
+          </p>
+          <div className="flex items-center gap-3 mt-3">
+            <span className={cn(
+              'px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-all duration-300',
+              syncStatus === 'synced' && 'bg-success/10 border-success/30 text-success',
+              syncStatus === 'syncing' && 'bg-primary/10 border-primary/30 text-primary animate-pulse',
+              syncStatus === 'error' && 'bg-error/10 border-error/30 text-error',
+              syncStatus === 'idle' && 'bg-surface/50 border-border text-muted'
+            )}>
+              {syncStatus === 'syncing' ? 'Analyzing...' : syncStatus === 'error' ? 'Sync Error' : 'System Ready'}
+            </span>
+            <p className="text-[11px] text-muted font-medium">
+              {isMounted && lastSyncedAt
+                ? `Updated ${new Date(lastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                : 'Hydrating profile...'}
+            </p>
+          </div>
+        </div>
+        
+        <button 
+          onClick={() => window.location.reload()}
+          className="btn-outline px-4 py-2 mt-4 md:mt-0"
+        >
+          <Sparkles className="w-4 h-4 text-primary" />
+          Full Re-Sync
+        </button>
       </div>
 
       {/* Stat cards */}
