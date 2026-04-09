@@ -208,7 +208,7 @@ function fallbackReply(message, context, resumeRows, interviewRows) {
       (latestRe ? `Latest resume run: **${latestRe.score}**/100 (${latestRe.role_target || 'role'}). ` : '') +
       (latestIv ? `Latest mock interview: **${latestIv.overall_score}**/100 (${latestIv.role || 'role'}). ` : '') +
       `\n\n**7-day roadmap (aligned to your profile)**\n\n${lines.join('\n\n')}\n\n` +
-      `_Enable **GEMINI_API_KEY** on the server for richer, adaptive planning._`
+      `_Tip: add **GEMINI_API_KEY** on Render (backend) or Vercel so the mentor uses full Gemini instead of this template._`
     )
   }
 
@@ -220,7 +220,7 @@ function fallbackReply(message, context, resumeRows, interviewRows) {
       `You asked: "${message.slice(0, 200)}"\n\n` +
       dataLine +
       `\n**This week — do these first:**\n${next}\n\n` +
-      `_Add **GEMINI_API_KEY** for full AI coaching._`
+      `_Tip: set **GEMINI_API_KEY** on Render or Vercel for conversational AI coaching._`
     )
   }
 
@@ -232,7 +232,7 @@ function fallbackReply(message, context, resumeRows, interviewRows) {
         ? `Latest session: **${latestIv.overall_score}**/100, ${latestIv.answered_count || 0}/${latestIv.total_questions || '?'} answered (${latestIv.role}). `
         : 'No mock interview history in the database yet — schedule one in the dashboard. ') +
       `\n\n**To raise interview scores:** use STAR/PAR, name trade-offs, add one metric per story, and do one full mock every 2–3 days.\n\n` +
-      `_GEMINI_API_KEY_ unlocks line-by-line feedback style answers._`
+      `_Tip: add **GEMINI_API_KEY** on Render or Vercel for deeper feedback._`
     )
   }
 
@@ -242,7 +242,7 @@ function fallbackReply(message, context, resumeRows, interviewRows) {
       `You asked: "${message.slice(0, 200)}"\n\n` +
       dataLine +
       `\n**Improving ${top}:**\n• One focused block daily (45–90m)\n• One small project or LeetCode/design prompt with a written retrospective\n• Teach it back in one paragraph (Feynman-style)\n\n` +
-      `_Full personalization needs **GEMINI_API_KEY**._`
+      `_Tip: add **GEMINI_API_KEY** on Render or Vercel for tailored coaching._`
     )
   }
 
@@ -252,8 +252,35 @@ function fallbackReply(message, context, resumeRows, interviewRows) {
     (latestRe ? `Latest resume: **${latestRe.score}**/100 (${latestRe.role_target || 'role'}). ` : '') +
     (latestIv ? `Latest interview: **${latestIv.overall_score}**/100. ` : '') +
     `\n\n**Suggestions:** pick one gap from above, tie it to a task or roadmap day, and measure one outcome (score, time, or artifact) by end of week.\n\n` +
-    `_Set **GEMINI_API_KEY** for natural, conversational answers._`
+    `_Tip: add **GEMINI_API_KEY** on Render (backend) or Vercel for natural Gemini answers._`
   )
+}
+
+async function callBackendMentor(baseUrl, systemPrompt, message, historyPrior) {
+  const res = await fetch(`${baseUrl.replace(/\/$/, '')}/mentor/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    cache: 'no-store',
+    body: JSON.stringify({
+      system_prompt: systemPrompt,
+      message,
+      history: historyPrior.map((m) => ({
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        content: String(m.content || '').slice(0, 12000),
+      })),
+    }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const detail = data?.detail
+    const msg = Array.isArray(detail)
+      ? detail.map((d) => d?.msg || d).join(', ')
+      : typeof detail === 'string'
+        ? detail
+        : res.statusText
+    throw new Error(msg || 'Backend mentor failed')
+  }
+  return data
 }
 
 export async function POST(request) {
@@ -273,19 +300,6 @@ export async function POST(request) {
 
     const { resumeRows, interviewRows } = await fetchDashboardSnapshot(userId)
 
-    const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({
-        message: fallbackReply(message, context, resumeRows, interviewRows),
-        usedAI: false,
-        warning: 'GEMINI_API_KEY not set',
-      })
-    }
-
-    const modelId = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
-
-    const google = createGoogleGenerativeAI({ apiKey })
-
     const system = buildSystemPrompt({
       context,
       resumeRows,
@@ -301,24 +315,57 @@ export async function POST(request) {
         content: String(m.content || '').slice(0, 12000),
       }))
 
-    const { text } = await generateText({
-      model: google(modelId),
-      system,
-      messages: [
-        ...prior,
-        {
-          role: 'user',
-          content:
-            `Latest question (answer this specifically; do not repeat generic advice):\n"""${message.slice(0, 8000)}"""`,
-        },
-      ],
-      temperature: 0.88,
-      maxOutputTokens: 2048,
-    })
+    const base = backendUrl()
+    const vercelGemini = process.env.GEMINI_API_KEY
+
+    // 1) Optional: Gemini on Vercel (env var on the frontend deployment)
+    if (vercelGemini) {
+      const modelId = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+      const google = createGoogleGenerativeAI({ apiKey: vercelGemini })
+      const { text } = await generateText({
+        model: google(modelId),
+        system,
+        messages: [
+          ...prior,
+          {
+            role: 'user',
+            content:
+              `Latest question (answer this specifically; do not repeat generic advice):\n"""${message.slice(0, 8000)}"""`,
+          },
+        ],
+        temperature: 0.88,
+        maxOutputTokens: 2048,
+      })
+      return NextResponse.json({
+        message: text || fallbackReply(message, context, resumeRows, interviewRows),
+        usedAI: true,
+        source: 'vercel',
+      })
+    }
+
+    // 2) Gemini on Render / FastAPI (same key you already use for interview)
+    if (base) {
+      try {
+        const data = await callBackendMentor(base, system, message, prior)
+        return NextResponse.json({
+          message: data.message || fallbackReply(message, context, resumeRows, interviewRows),
+          usedAI: true,
+          source: data.source || 'backend',
+        })
+      } catch (be) {
+        console.error('backend mentor error:', be)
+        return NextResponse.json({
+          message: fallbackReply(message, context, resumeRows, interviewRows),
+          usedAI: false,
+          warning: `Backend mentor unavailable: ${be instanceof Error ? be.message : String(be)}`,
+        })
+      }
+    }
 
     return NextResponse.json({
-      message: text || fallbackReply(message, context, resumeRows, interviewRows),
-      usedAI: true,
+      message: fallbackReply(message, context, resumeRows, interviewRows),
+      usedAI: false,
+      warning: 'No GEMINI_API_KEY on Vercel and NEXT_PUBLIC_BACKEND_URL not set',
     })
   } catch (error) {
     console.error('mentor chat error:', error)
