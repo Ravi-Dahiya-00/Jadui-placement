@@ -67,6 +67,13 @@ class ResumeAnalyzer:
         "keep it up",
         "proud of you",
     )
+    _SECTION_LABELS = {
+        "personal_summary": "Personal Summary",
+        "technical_skills": "Technical Skills",
+        "experience": "Experience",
+        "projects": "Projects",
+        "leadership_achievements": "Leadership Achievements",
+    }
 
     def _sanitize_tone_line(self, text: str) -> str:
         line = str(text or "").strip()
@@ -123,31 +130,209 @@ class ResumeAnalyzer:
         score = max(40, min(88, score))
         return {"issues": issues, "tips": tips[:3], "score": score}
 
-    def _fallback_section_reviews(self, text: str) -> list[dict[str, Any]]:
-        audit = self._deterministic_quality_audit(text)
-        section_defaults = {
-            "personal_summary": "Add contact links + a 2-3 line role-first summary with technical strengths.",
-            "technical_skills": "Group skills by Languages, Frontend, Backend, Databases, Tools. Remove weak/redundant items.",
-            "experience": "Rewrite bullets in PAR format with measurable engineering impact.",
-            "projects": "Lead with strongest backend/system project and show APIs, DB, and optimization depth.",
-            "leadership_achievements": "Keep only verifiable, high-impact technical achievements.",
+    def _extract_all_sections(self, resume_text: str) -> dict[str, str]:
+        sections = {
+            "personal_summary": self._extract_section(
+                resume_text,
+                [r"^personal details", r"^contact", r"^professional summary", r"^summary", r"^profile"],
+            ),
+            "technical_skills": self._extract_section(resume_text, [r"^technical skills", r"^skills", r"^tech stack"]),
+            "experience": self._extract_section(resume_text, [r"^experience", r"^work experience", r"^employment"]),
+            "projects": self._extract_section(resume_text, [r"^projects", r"^project"]),
+            "leadership_achievements": self._extract_section(
+                resume_text,
+                [r"^leadership", r"^achievements", r"^leadership\s*&\s*achievements", r"^positions of responsibility"],
+            ),
         }
-        reviews: list[dict[str, Any]] = []
-        for section in self._SECTION_KEYS:
-            reviews.append(
-                {
-                    "section": section,
-                    "bs_factor": min(10, max(2, len(audit["issues"]) + 2)),
-                    "issues": audit["issues"][:4] or ["Section lacks technical clarity and recruiter-ready framing."],
-                    "improved_block": section_defaults[section],
-                    "justification": ["Generated from deterministic audit because section-wise LLM review is unavailable."],
-                    "tips": audit["tips"] or ["Use concise, technical, ATS-friendly wording."],
-                    "extracted_skills": [],
-                    "inferred_role": "",
-                    "experience_level": "entry",
-                }
+        for key, value in list(sections.items()):
+            if value:
+                continue
+            sections[key] = self._infer_section_without_heading(resume_text, key)
+        return sections
+
+    def _infer_section_without_heading(self, resume_text: str, section: str) -> str:
+        lines = [ln.strip() for ln in (resume_text or "").splitlines() if ln.strip()]
+        low_lines = [ln.lower() for ln in lines]
+        if not lines:
+            return ""
+
+        if section == "personal_summary":
+            # Use top block before clear experience/project timeline markers.
+            stop_words = ("experience", "work experience", "projects", "skills", "education")
+            block: list[str] = []
+            for line in lines[:18]:
+                if any(sw in line.lower() for sw in stop_words):
+                    break
+                block.append(line)
+            return normalize_space("\n".join(block[:6]))
+
+        if section == "technical_skills":
+            skill_lines = [
+                lines[i]
+                for i, low in enumerate(low_lines)
+                if "," in low and sum(1 for s in COMMON_SKILLS if s in low) >= 2
+            ]
+            return normalize_space("\n".join(skill_lines[:4]))
+
+        if section == "experience":
+            exp_tokens = ("intern", "developer", "engineer", "company", "present", "month", "year")
+            exp_lines = [lines[i] for i, low in enumerate(low_lines) if any(t in low for t in exp_tokens)]
+            return normalize_space("\n".join(exp_lines[:8]))
+
+        if section == "projects":
+            proj_tokens = ("project", "built", "developed", "implemented", "deployed", "github")
+            proj_lines = [lines[i] for i, low in enumerate(low_lines) if any(t in low for t in proj_tokens)]
+            return normalize_space("\n".join(proj_lines[:8]))
+
+        if section == "leadership_achievements":
+            leader_tokens = ("lead", "mentored", "organized", "hackathon", "winner", "achievement", "community")
+            leader_lines = [lines[i] for i, low in enumerate(low_lines) if any(t in low for t in leader_tokens)]
+            return normalize_space("\n".join(leader_lines[:6]))
+
+        return ""
+
+    def _deterministic_section_review(self, section: str, section_text: str, full_text: str) -> dict[str, Any]:
+        text = (section_text or "").strip()
+        full = (full_text or "").lower()
+        low = text.lower()
+        issues: list[str] = []
+        tips: list[str] = []
+        improved_block = ""
+        extracted_skills: list[str] = []
+        inferred_role = ""
+        exp_level = self.infer_experience_level(full_text)
+        confidence = 88
+
+        if section == "personal_summary":
+            if not text:
+                issues.append("Personal details/professional summary section is missing.")
+                confidence -= 35
+            if "linkedin.com" not in full:
+                issues.append("LinkedIn URL missing in contact header.")
+                confidence -= 8
+            if "github.com" not in full:
+                issues.append("GitHub URL missing in contact header.")
+                confidence -= 8
+            weak_words = [w for w in ("passionate", "hardworking", "enthusiastic") if w in low]
+            if weak_words:
+                issues.append("Summary uses weak claims: " + ", ".join(weak_words))
+                confidence -= 12
+            tips = [
+                "Keep summary to 2-3 lines with role-first positioning.",
+                "Add clickable LinkedIn and GitHub links in one clean line.",
+                "Replace generic adjectives with backend/API strengths.",
+            ]
+            improved_block = (
+                "Full Stack Developer focused on backend APIs, scalable web systems, and SQL-driven applications. "
+                "Builds production-grade features across React/Next.js and Python/Node backends with measurable delivery outcomes."
             )
-        return [self._sanitize_review_payload(r) for r in reviews]
+
+        elif section == "technical_skills":
+            extracted_skills = self.extract_skills(text or full_text)
+            if not text:
+                issues.append("Technical Skills section is missing.")
+                confidence -= 30
+            if len(extracted_skills) < 5:
+                issues.append("Skill depth appears limited for software engineering screening.")
+                confidence -= 14
+            if len(extracted_skills) > 16:
+                issues.append("Skill list is overloaded and may reduce credibility.")
+                confidence -= 10
+            tips = [
+                "Group skills by Languages, Frontend, Backend, Databases, Tools.",
+                "Remove technologies you cannot defend in interviews.",
+                "Keep stack aligned to target role requirements.",
+            ]
+            improved_block = (
+                "Languages: JavaScript, TypeScript, Python, SQL | "
+                "Frontend: React, Next.js | Backend: Node.js, FastAPI | "
+                "Databases: PostgreSQL, MySQL, MongoDB | Tools: Git, Docker"
+            )
+
+        elif section == "experience":
+            if not text:
+                issues.append("Experience section is missing.")
+                confidence -= 35
+            weak_hits = [p for p in ("worked on", "helped with", "responsible for", "collaborated") if p in low]
+            if weak_hits:
+                issues.append("Experience bullets use weak phrasing: " + ", ".join(weak_hits[:3]))
+                confidence -= 12
+            if not re.search(r"\d+%|\d+\s*(ms|sec|users|requests|x)", low):
+                issues.append("Experience bullets lack measurable impact signals.")
+                confidence -= 10
+            tips = [
+                "Rewrite bullets in Problem -> Action -> Result format.",
+                "Start each bullet with strong engineering verbs.",
+                "Add measurable impact only where factual and defensible.",
+            ]
+            improved_block = (
+                "- Reduced API response latency by optimizing query paths and caching critical endpoints.\n"
+                "- Built and deployed backend services for auth, data validation, and analytics workflows."
+            )
+
+        elif section == "projects":
+            if not text:
+                issues.append("Projects section is missing.")
+                confidence -= 35
+            if "api" not in low:
+                issues.append("Project write-up lacks explicit API/backend implementation details.")
+                confidence -= 12
+            if all(k not in low for k in ("postgres", "mysql", "mongodb", "database")):
+                issues.append("Database design/usage is not clearly mentioned.")
+                confidence -= 10
+            tips = [
+                "Lead with strongest technically deep project first.",
+                "State architecture choices: API, DB, auth, caching, deployment.",
+                "Describe how features were built, not just what they do.",
+            ]
+            improved_block = (
+                "- Designed REST APIs with role-based auth and PostgreSQL schema for core workflows.\n"
+                "- Implemented backend validation and async processing to improve reliability under load."
+            )
+
+        elif section == "leadership_achievements":
+            if not text:
+                issues.append("Leadership & Achievements section is missing.")
+                confidence -= 25
+            if len(text.split()) < 20:
+                issues.append("Leadership section is too thin to influence shortlist decisions.")
+                confidence -= 8
+            if any(k in low for k in ("helped others", "shared knowledge")):
+                issues.append("Leadership claims are generic and not tied to scale or impact.")
+                confidence -= 12
+            tips = [
+                "Keep only verifiable achievements with clear impact.",
+                "Prioritize technical leadership over generic statements.",
+                "Put strongest achievement first with scale/context.",
+            ]
+            improved_block = (
+                "- Led technical delivery for multi-feature release with clear ownership boundaries.\n"
+                "- Drove measurable process improvement through code quality and review standards."
+            )
+
+        bs_factor = min(10, max(2, 3 + len(issues)))
+        return self._sanitize_review_payload(
+            {
+                "section": section,
+                "bs_factor": bs_factor,
+                "issues": issues or [f"{self._SECTION_LABELS.get(section, section)} needs stronger technical clarity."],
+                "improved_block": improved_block,
+                "justification": [f"Focused on recruiter signal quality for {self._SECTION_LABELS.get(section, section)}."],
+                "tips": tips,
+                "extracted_skills": extracted_skills[:15],
+                "inferred_role": inferred_role,
+                "experience_level": exp_level,
+                "confidence": max(20, min(95, confidence)),
+            }
+        )
+
+    def _fallback_section_reviews(self, text: str) -> list[dict[str, Any]]:
+        sections = self._extract_all_sections(text)
+        reviews = [
+            self._deterministic_section_review(section, sections.get(section, ""), text)
+            for section in self._SECTION_KEYS
+        ]
+        return reviews
 
     def _build_detailed_review(
         self,
@@ -303,34 +488,28 @@ class ResumeAnalyzer:
         return self._llm_json(prompt)
 
     def _llm_section_reviews(self, resume_text: str) -> list[dict[str, Any]]:
-        personal_summary = self._extract_section(
-            resume_text,
-            [r"^personal details", r"^contact", r"^professional summary", r"^summary"],
-        )
-        technical_skills = self._extract_section(resume_text, [r"^technical skills", r"^skills"])
-        experience = self._extract_section(resume_text, [r"^experience", r"^work experience"])
-        projects = self._extract_section(resume_text, [r"^projects", r"^project"])
-        leadership = self._extract_section(
-            resume_text,
-            [r"^leadership", r"^achievements", r"^leadership\s*&\s*achievements"],
-        )
+        sections = self._extract_all_sections(resume_text)
 
         prompts: list[tuple[str, str]] = [
-            ("personal_summary", personal_summary_review_prompt(personal_summary or resume_text[:2000])),
-            ("technical_skills", technical_skills_review_prompt(technical_skills or resume_text[:2000])),
-            ("experience", experience_review_prompt(experience or resume_text[:2500])),
-            ("projects", projects_review_prompt(projects or resume_text[:2500])),
-            ("leadership_achievements", leadership_review_prompt(leadership or resume_text[:1500])),
+            ("personal_summary", personal_summary_review_prompt(sections.get("personal_summary") or resume_text[:2000])),
+            ("technical_skills", technical_skills_review_prompt(sections.get("technical_skills") or resume_text[:2000])),
+            ("experience", experience_review_prompt(sections.get("experience") or resume_text[:2500])),
+            ("projects", projects_review_prompt(sections.get("projects") or resume_text[:2500])),
+            ("leadership_achievements", leadership_review_prompt(sections.get("leadership_achievements") or resume_text[:1500])),
         ]
 
         reviews: list[dict[str, Any]] = []
-        for _, prompt in prompts:
+        for section_key, prompt in prompts:
             try:
                 data = self._llm_json(prompt)
                 if isinstance(data, dict):
+                    data["section"] = section_key
+                    data["confidence"] = int(data.get("confidence", 78) or 78)
                     reviews.append(self._sanitize_review_payload(data))
+                else:
+                    reviews.append(self._deterministic_section_review(section_key, sections.get(section_key, ""), resume_text))
             except Exception:
-                continue
+                reviews.append(self._deterministic_section_review(section_key, sections.get(section_key, ""), resume_text))
         return reviews
 
     def analyze(

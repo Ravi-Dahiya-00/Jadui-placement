@@ -114,14 +114,20 @@ export default function ResumeResults({ data }) {
             const tips = Array.isArray(review.tips) ? review.tips : []
             const improved = String(review.improved_block || '').trim()
             const bsFactor = Number(review.bs_factor || 0)
+            const confidence = Number(review.confidence || 0)
 
             return (
               <div key={`${title}-${idx}`} className="rounded-lg border border-border p-4 bg-surface/40 space-y-3">
                 <div className="flex items-center justify-between">
                   <h5 className="text-sm font-semibold text-white">{title}</h5>
-                  {bsFactor > 0 ? (
-                    <span className="text-xs text-warning">BS factor: {bsFactor}/10</span>
-                  ) : null}
+                  <div className="flex items-center gap-2">
+                    {confidence > 0 ? (
+                      <span className="text-[11px] text-primary">Confidence: {confidence}%</span>
+                    ) : null}
+                    {bsFactor > 0 ? (
+                      <span className="text-xs text-warning">BS factor: {bsFactor}/10</span>
+                    ) : null}
+                  </div>
                 </div>
 
                 {issues.length > 0 && (
