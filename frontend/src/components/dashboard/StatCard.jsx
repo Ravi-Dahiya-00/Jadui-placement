@@ -20,10 +20,11 @@ export default function StatCard({ title, value, subtitle, icon: Icon, trend, tr
 
   return (
     <div className={cn(
-      'bg-card border border-border rounded-xl p-5 transition-all duration-300',
-      'hover:border-primary/25 hover:shadow-[0_8px_32px_rgba(0,0,0,0.4)]',
+      'glass border border-border rounded-2xl p-6 transition-all duration-500 group relative overflow-hidden',
+      'hover:border-primary/40 hover:shadow-glow translate-y-0 hover:-translate-y-1',
       className
     )}>
+      <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 blur-2xl rounded-full -mr-12 -mt-12 group-hover:bg-primary/10 transition-colors" />
       <div className="flex items-start justify-between mb-4">
         {/* Title + trend */}
         <div>

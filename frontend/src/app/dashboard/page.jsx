@@ -66,12 +66,47 @@ export default function DashboardPage() {
         setLastSyncedAt(new Date().toISOString())
       }
     }
-    loadStats()
-    setIsMounted(true)
-  }, [])
+    
+    const loadRadarAndBio = async () => {
+      if (!state.user?.id) return
+      try {
+        setLoadingRadar(true)
+        // Note: The backend uses Query parameters for github_username
+        const gh = state.chatContext?.githubUsername || ''
+        const [radarRes, sugRes] = await Promise.all([
+          fetch(`/api/system/readiness?user_id=${state.user.id}${gh ? `&github_username=${gh}` : ''}`, { cache: 'no-store' }),
+          fetch(`/api/system/suggestions?github_username=${gh}`, { cache: 'no-store' })
+        ])
+        const radarJson = await radarRes.json()
+        const sugJson = await sugRes.json()
+        
+        if (radarRes.ok) {
+          const transformed = [
+            { subject: 'Resume',   value: radarJson.resume || 0,      fullMark: 100 },
+            { subject: 'Technical',value: radarJson.technical || 0,   fullMark: 100 },
+            { subject: 'Interview',value: radarJson.interview || 0,   fullMark: 100 },
+            { subject: 'Execution',value: radarJson.consistency || 0, fullMark: 100 },
+          ]
+          setReadinessData(transformed)
+        }
+        if (sugRes.ok) {
+          setCareerSuggestions(sugJson.suggestions || [])
+        }
+      } catch (err) {
+        console.error('Radar load failed', err)
+      } finally {
+        setLoadingRadar(false)
+      }
+    }
 
-  const [readinessData, setReadinessData] = useState(null)
+    loadStats()
+    loadRadarAndBio()
+    setIsMounted(true)
+  }, [state.user?.id, state.chatContext?.githubUsername])
+
+  const [readinessData, setReadinessData] = useState([])
   const [careerSuggestions, setCareerSuggestions] = useState([])
+  const [loadingRadar, setLoadingRadar] = useState(false)
 
   const derived = useMemo(() => {
     const latestResume = resumeHistory[0] || null
@@ -318,7 +353,11 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className={`max-w-7xl mx-auto space-y-8 transition-opacity duration-500 ${isMounted ? 'opacity-100' : 'opacity-0'}`}>
+    <div className={`max-w-7xl mx-auto space-y-8 transition-opacity duration-700 ${isMounted ? 'opacity-100' : 'opacity-0'} relative`}>
+      {/* Background orbs for premium feel */}
+      <div className="absolute top-[-100px] right-[-100px] w-96 h-96 bg-primary/10 blur-[100px] rounded-full -z-10 animate-pulse" />
+      <div className="absolute bottom-[200px] left-[-100px] w-72 h-72 bg-secondary/10 blur-[80px] rounded-full -z-10" />
+
       {/* Greeting */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
@@ -403,37 +442,108 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-card border border-border rounded-xl p-5">
-          <h3 className="font-semibold text-white mb-2">Personal Coach Summary</h3>
-          <p className="text-sm text-muted">
-            Readiness status: <span className={cn('font-semibold', readinessBand.tone)}>{readinessBand.label}</span>. {readinessBand.note}
-          </p>
-          <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-3">
-            <p className="text-xs uppercase tracking-wider text-primary font-semibold mb-1">Next Best Action</p>
-            <p className="text-sm text-white">{nextBestAction}</p>
+        <div className="lg:col-span-2 glass border border-border rounded-2xl p-6 shadow-glow">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <Target className="w-5 h-5 text-primary" />
+                Readiness Radar
+              </h3>
+              <p className="text-xs text-muted mt-1">Cross-module candidate analysis</p>
+            </div>
+            <div className="flex gap-2">
+               <span className="text-[10px] uppercase font-bold text-primary bg-primary/10 px-2 py-1 rounded">Resume</span>
+               <span className="text-[10px] uppercase font-bold text-accent bg-accent/10 px-2 py-1 rounded">Dev</span>
+               <span className="text-[10px] uppercase font-bold text-success bg-success/10 px-2 py-1 rounded">Comm</span>
+            </div>
           </div>
           
-          {careerSuggestions.length > 0 && (
-            <div className="mt-4 space-y-2">
-              <p className="text-xs uppercase tracking-wider text-secondary font-semibold mb-1 flex items-center gap-1">
-                <Sparkles className="w-3 h-3" /> AI Career Mentor Tips
-              </p>
-              {careerSuggestions.map((sug, i) => (
-                <div key={i} className="text-sm text-muted bg-surface/30 rounded-lg p-3 border border-border/50">
-                  {sug}
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart cx="50%" cy="50%" outerRadius="80%" data={readinessData}>
+                <PolarGrid stroke="#333" />
+                <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                <PolarRadiusAxis angle={30} domain={[0, 100]} axisLine={false} tick={false} />
+                <Radar
+                   name="Candidate"
+                   dataKey="value"
+                   stroke="#6366f1"
+                   fill="#6366f1"
+                   fillOpacity={0.5}
+                />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#111120', border: '1px solid #333', borderRadius: '8px' }}
+                  itemStyle={{ color: '#fff' }}
+                />
+              </RadarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-        <div className="bg-card border border-border rounded-xl p-5">
-          <h3 className="font-semibold text-white mb-3">Risk Alerts</h3>
+
+        <div className="glass border border-border rounded-2xl p-6 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <Sparkles className="w-16 h-16 text-primary" />
+          </div>
+          <h3 className="text-lg font-bold text-white mb-1">Technical Bio Booster</h3>
+          <p className="text-xs text-muted mb-6">AI-generated resume bullets from GitHub</p>
+          
+          <div className="space-y-4">
+            {careerSuggestions.length > 0 ? (
+              careerSuggestions.map((sug, i) => (
+                <div key={i} className="relative pl-4 border-l-2 border-primary/30 group/item">
+                  <div className="absolute -left-[5px] top-1.5 w-2 h-2 rounded-full bg-primary/40 group-hover/item:bg-primary transition-colors" />
+                  <p className="text-sm text-muted group-hover/item:text-white transition-colors leading-relaxed">
+                    {sug}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8">
+                <div className="w-12 h-12 rounded-full bg-surface/50 flex items-center justify-center mx-auto mb-3">
+                   <Target className="w-6 h-6 text-muted" />
+                </div>
+                <p className="text-xs text-muted italic">No technical boosters yet. Scan your GitHub profile to unlock.</p>
+              </div>
+            )}
+          </div>
+          
+          <div className="mt-8 pt-4 border-t border-border/50">
+             <button className="flex items-center gap-2 text-xs text-primary font-bold hover:gap-3 transition-all">
+                Copy all to clipboard
+                <ArrowRight className="w-3 h-3" />
+             </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 glass border border-border rounded-xl p-8">
+          <h3 className="text-xl font-bold text-white mb-2">Personal Coach Summary</h3>
+          <p className="text-sm text-muted leading-relaxed">
+            Readiness status: <span className={cn('font-bold border-b-2', readinessBand.tone, readinessBand.tone.replace('text-', 'border-'))}>{readinessBand.label}</span>. {readinessBand.note}
+          </p>
+          <div className="mt-6 rounded-2xl border border-primary/20 bg-primary/5 p-5 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-5">
+              <Sparkles className="w-20 h-20 text-primary" />
+            </div>
+            <p className="text-[10px] uppercase font-black tracking-widest text-primary mb-2">Next Best Action</p>
+            <p className="text-lg font-bold text-white leading-tight pr-10">{nextBestAction}</p>
+          </div>
+        </div>
+        <div className="glass border border-border rounded-xl p-8">
+          <h3 className="text-xl font-bold text-white mb-4">Risk Alerts</h3>
           {riskAlerts.length === 0 ? (
-            <p className="text-sm text-success">No critical alerts. You are progressing well.</p>
+            <div className="flex flex-col items-center justify-center py-6 text-center">
+              <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center mb-3">
+                <CheckCircle2 className="w-6 h-6 text-success" />
+              </div>
+              <p className="text-sm text-success font-medium">All clear! No critical risks detected.</p>
+            </div>
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {riskAlerts.map((alert) => (
-                <li key={alert} className="text-sm text-warning rounded-md border border-warning/20 bg-warning/5 px-3 py-2">
+                <li key={alert} className="text-sm text-warning rounded-xl border border-warning/10 bg-warning/5 px-4 py-3 flex items-start gap-3">
+                  <div className="w-1.5 h-1.5 rounded-full bg-warning mt-1.5 shrink-0" />
                   {alert}
                 </li>
               ))}

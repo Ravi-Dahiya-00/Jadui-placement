@@ -14,44 +14,62 @@ export default function InterviewCard({ id, role, type, score, date, summary }) 
     }) : "Recently";
 
     return (
-        <div className="bg-surface border border-border hover:border-border/80 transition-all rounded-2xl w-full min-h-[320px] shadow-sm relative overflow-hidden group">
-            <div className="p-6 flex flex-col h-full">
-                {/* Badge */}
-                <div className={`absolute top-0 right-0 px-4 py-2 rounded-bl-xl ${badgeColor}`}>
-                    <span className="text-xs font-bold uppercase tracking-wider">{type || "Mixed"}</span>
+        <div className={cn(
+            "glass relative border border-border group overflow-hidden rounded-2xl transition-all duration-500",
+            "hover:border-primary/40 hover:shadow-glow translate-y-0 hover:-translate-y-1",
+            "w-full min-h-[340px]"
+        )}>
+            {/* Background Accent orbs */}
+            <div className={cn(
+                "absolute top-0 right-0 w-32 h-32 blur-3xl rounded-full opacity-20 -mr-16 -mt-16 transition-colors duration-500",
+                type === "Technical" ? "bg-accent" : type === "Behavioral" ? "bg-primary" : "bg-secondary"
+            )} />
+            
+            <div className="p-8 flex flex-col h-full relative z-10">
+                {/* Badge Tag */}
+                <div className="flex justify-between items-start mb-6">
+                    <div className={cn(
+                        "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/10",
+                        badgeColor
+                    )}>
+                        {type || "Mixed Mode"}
+                    </div>
                 </div>
 
-                {/* Header info */}
-                <div className="mt-8 flex flex-col items-center flex-1">
-                    <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-primary/30 to-accent/30 flex items-center justify-center mb-4 border border-white/5">
-                        <span className="text-2xl">🎙️</span>
+                {/* Header Profile Icon */}
+                <div className="flex flex-col items-center flex-1">
+                    <div className="w-20 h-20 rounded-2xl glass-light flex items-center justify-center mb-5 border border-white/5 relative group-hover:scale-110 transition-transform duration-500 shadow-xl">
+                        <span className="text-3xl filter drop-shadow-[0_0_10px_rgba(255,255,255,0.4)]">🎙️</span>
                     </div>
 
-                    <h3 className="text-xl font-bold text-white capitalize text-center">
-                        {role} Interview
+                    <h3 className="text-2xl font-black text-white capitalize text-center tracking-tight">
+                        {role} <span className="text-muted block text-xs font-bold uppercase tracking-widest mt-1">Interview Session</span>
                     </h3>
                 </div>
 
-                {/* Score & Date */}
-                <div className="flex justify-center gap-6 mt-4 text-muted text-sm border-y border-border/50 py-3">
-                    <div className="flex items-center gap-1.5 font-semibold">
-                        <span className="text-warning">★</span> {score ?? "---"} / 100
+                {/* Metrics */}
+                <div className="grid grid-cols-2 gap-px bg-border/20 rounded-xl overflow-hidden mt-6 border border-border/30">
+                    <div className="bg-surface/40 p-3 text-center">
+                        <p className="text-[10px] text-muted font-bold uppercase tracking-wider mb-1">Score</p>
+                        <p className="text-sm font-black text-warning flex items-center justify-center gap-1">
+                            {score ?? "--"}<span className="text-[10px] text-muted">/100</span>
+                        </p>
                     </div>
-                    <div className="flex items-center gap-1.5 font-medium">
-                        <span>📅</span> {formattedDate}
+                    <div className="bg-surface/40 p-3 text-center">
+                        <p className="text-[10px] text-muted font-bold uppercase tracking-wider mb-1">Completed</p>
+                        <p className="text-sm font-black text-white">{formattedDate}</p>
                     </div>
                 </div>
 
-                {/* Summary */}
-                <p className="mt-4 line-clamp-3 text-center text-sm text-muted/80 leading-relaxed min-h-[60px]">
-                    {summary ?? "No feedback provided for this session. It might have been interrupted."}
-                </p>
-
-                {/* Action Button */}
-                <div className="mt-6">
-                    <button className="w-full flex items-center justify-center gap-2 bg-background border border-border text-white text-sm font-semibold rounded-xl py-3 hover:bg-white/5 transition-colors">
-                        <Play className="w-4 h-4" />
-                        {summary ? "Review Transcript" : "Restart Session"}
+                {/* Action */}
+                <div className="mt-8">
+                    <button className={cn(
+                        "w-full flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest rounded-xl py-4 transition-all duration-300",
+                        summary 
+                            ? "bg-primary/10 border border-primary/20 text-primary hover:bg-primary hover:text-white"
+                            : "bg-surface/60 border border-border text-white hover:border-primary/40 hover:bg-primary/10"
+                    )}>
+                        {summary ? "Review Analysis" : "Resume Session"}
                     </button>
                 </div>
             </div>

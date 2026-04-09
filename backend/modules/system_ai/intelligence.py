@@ -61,7 +61,7 @@ class CareerIntelligenceService:
         }
 
     def get_placement_suggestions(self, github_username: str) -> list[str]:
-        """Generates resume bullet point suggestions based on GitHub activity."""
+        """Generates high-impact resume bullet point suggestions based on GitHub activity."""
         try:
             gh_profile = build_profile(github_username, include_insights=False)
             top_repos = sorted(
@@ -72,17 +72,23 @@ class CareerIntelligenceService:
             
             suggestions = []
             for name, stars in top_repos:
-                desc = gh_profile.get('repoStarCountDescriptions', {}).get(name) or "a high-impact project"
-                if stars > 5:
+                desc = gh_profile.get('repoStarCountDescriptions', {}).get(name) or "a high-impact technical project"
+                # Generate professional-sounding bullet points
+                if stars > 10:
                     suggestions.append(
-                        f"Add to Resume: 'Developed {name}, {desc}, gaining {stars} stars on GitHub.'"
+                        f"Architected and maintained '{name}' ({desc}), achieving over {stars} stars from the developer community."
                     )
                 else:
+                    langs = list(gh_profile.get('langRepoCount', {}).keys())[:2]
+                    lang_str = " and ".join(langs) if langs else "modern frameworks"
                     suggestions.append(
-                        f"Highlight in Projects: '{name} - focusing on {gh_profile.get('langRepoCount', {}).keys()}'"
+                        f"Engineered '{name}', a robust project focused on {desc}, leverageing {lang_str} for optimized performance."
                     )
+            
+            if not suggestions:
+                return ["Your GitHub profile is ready. Start building more public repositories to unlock AI resume boosters!"]
             return suggestions
         except Exception:
-            return ["Analyze your GitHub profile to unlock technical resume suggestions."]
+            return ["Link your GitHub profile in the scanner to unlock automatic technical resume boosters."]
 
 intelligence_service = CareerIntelligenceService()
