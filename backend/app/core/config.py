@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     GROQ_MODEL: str = "llama-3-8b-8192"
     OPENAI_API_KEY: Optional[str] = None
     
+    # GitHub Integration
+    GITHUB_TOKEN: Optional[str] = None
+    
     # App Settings
     PORT: int = 8000
     DEBUG: bool = False

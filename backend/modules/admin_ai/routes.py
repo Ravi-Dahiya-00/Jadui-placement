@@ -88,3 +88,19 @@ def assign_tpo_task(payload: InterveneTaskRequest):
         return {"state": admin_service.assign_tpo_task(payload.user_id, payload.title)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/admin/students")
+def get_all_students():
+    """Fetches the complete student roster for the TPO dashboard."""
+    try:
+        return {"students": admin_service.get_all_students()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/admin/stats")
+def get_admin_stats():
+    """Provides aggregate metrics for the TPO command center."""
+    try:
+        return {"stats": admin_service.get_dashboard_stats()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

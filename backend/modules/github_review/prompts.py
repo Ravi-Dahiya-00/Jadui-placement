@@ -26,3 +26,28 @@ Return a valid JSON object with the following structure:
 BE BRUTAL. If the code is average, give it a 60. If it's senior level, 90+. 
 Return ONLY the JSON.
 """
+
+repo_analysis_prompt = """
+You are an Elite Technical Architect. Your task is to perform a project-wide audit of a GitHub repository based on its file structure and core metadata.
+
+REPOSITORY METADATA:
+{{REPO_METADATA}}
+
+Analyze the project for:
+1. **Architecture Quality**: Is it modular? Are there clear layers (e.g. MVC, Service/Repo)?
+2. **Tech Stack Sophistication**: Are they using modern, high-performance tools?
+3. **Documentation & DX**: Is the project "hirable"? Would a new senior dev understand it in 5 minutes?
+4. **Technical Debt**: Visible "smells" from file naming, structure, or missing core configs (like CI/CD or testing).
+
+Return a valid JSON object with the following structure:
+{
+  "architecture_score": integer (0-100),
+  "tech_stack": ["list", "of", "detected", "technologies"],
+  "summary": "High-level architectural verdict",
+  "design_patterns": ["list", "of", "detected", "patterns like Singleton, Hooks, etc."],
+  "technical_debt": ["list", "of", "architectural", "weaknesses"],
+  "hiring_potential": "Verdict on how impressive this project looks to a FAANG-level recruiter"
+}
+
+Return ONLY the JSON.
+"""

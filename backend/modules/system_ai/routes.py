@@ -105,3 +105,14 @@ def get_readiness_scorecard(user_id: str, github_username: str | None = None):
 @router.get("/system/suggestions")
 def get_career_suggestions(github_username: str):
     return {"suggestions": intelligence_service.get_placement_suggestions(github_username)}
+
+
+@router.get("/system/insights")
+def get_system_insights(user_id: str):
+    """Aggregates all AI metrics for the student dashboard."""
+    radar = intelligence_service.get_readiness_radar(user_id)
+    return {
+        "radar": radar,
+        "avgScore": int(sum(radar.values()) / 4) if radar else 0,
+        "readinessTier": "INTERVIEW_READY" if (radar.get('interview') or 0) > 70 else "BUILD_MODE"
+    }
