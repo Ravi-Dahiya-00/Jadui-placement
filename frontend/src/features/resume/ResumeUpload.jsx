@@ -6,9 +6,11 @@ import { Upload, FileText, Loader2, X, CheckCircle2 } from 'lucide-react'
 import { useApp, ACTIONS } from '@/context/AppContext'
 import { cn } from '@/lib/utils'
 
-export default function ResumeUpload({ onResult }) {
+export default function ResumeUpload({ onResult, onUploaded }) {
   const { dispatch } = useApp()
   const [file, setFile] = useState(null)
+  const [roleTarget, setRoleTarget] = useState('Software Engineer')
+  const [targetSkills, setTargetSkills] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -25,7 +27,11 @@ export default function ResumeUpload({ onResult }) {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'application/pdf': ['.pdf'] },
+    accept: {
+      'application/pdf': ['.pdf'],
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'text/plain': ['.txt'],
+    },
     maxFiles: 1
   })
 
@@ -36,7 +42,8 @@ export default function ResumeUpload({ onResult }) {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('jdText', 'Software Developer / Engineer Role')
+      formData.append('jdText', roleTarget)
+      formData.append('targetSkills', targetSkills)
 
       const response = await fetch('/api/resume/analyze', {
         method: 'POST',
@@ -50,7 +57,17 @@ export default function ResumeUpload({ onResult }) {
       }
 
       dispatch({ type: ACTIONS.SET_RESUME, payload: data })
+      try {
+        const insightsRes = await fetch('/api/system/insights', { cache: 'no-store' })
+        if (insightsRes.ok) {
+          const insights = await insightsRes.json()
+          dispatch({ type: ACTIONS.SET_SYSTEM_INSIGHTS, payload: insights })
+        }
+      } catch {
+        // Non-blocking; resume result is still available
+      }
       onResult?.(data)
+      onUploaded?.()
     } catch (err) {
       setError(err.message || 'Upload failed. Please try again.')
     } finally {
@@ -61,6 +78,21 @@ export default function ResumeUpload({ onResult }) {
   return (
     <div className="space-y-4">
       {/* Drop zone */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <input
+          value={roleTarget}
+          onChange={(e) => setRoleTarget(e.target.value)}
+          className="w-full rounded-xl border border-border bg-surface/50 px-3 py-2 text-sm text-white outline-none focus:border-primary"
+          placeholder="Target role (e.g., Backend Engineer)"
+        />
+        <input
+          value={targetSkills}
+          onChange={(e) => setTargetSkills(e.target.value)}
+          className="w-full rounded-xl border border-border bg-surface/50 px-3 py-2 text-sm text-white outline-none focus:border-primary"
+          placeholder="Target skills (comma-separated)"
+        />
+      </div>
+
       <div
         {...getRootProps()}
         className={cn(
@@ -95,7 +127,7 @@ export default function ResumeUpload({ onResult }) {
             </div>
             <div>
               <p className="text-white font-medium">Drop your resume here</p>
-              <p className="text-muted text-sm mt-1">or click to browse • PDF only • Max 5 MB</p>
+              <p className="text-muted text-sm mt-1">or click to browse • PDF/DOCX/TXT • Max 5 MB</p>
             </div>
           </div>
         )}

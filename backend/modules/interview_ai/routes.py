@@ -34,14 +34,7 @@ def start_interview(payload: StartInterviewRequest) -> dict:
         interview_type=payload.interview_type,
         question_count=payload.question_count,
     )
-    return {
-        "session_id": session.session_id,
-        "role": session.role,
-        "skills": session.skills,
-        "level": session.level,
-        "interview_type": session.interview_type,
-        "questions": session.questions,
-    }
+    return session
 
 
 @router.post("/interview/answer")
@@ -57,3 +50,8 @@ def submit_answer(payload: SubmitAnswerRequest) -> dict:
 @router.get("/interview/result")
 def interview_result(session_id: str) -> dict:
     return service.get_result(session_id=session_id)
+
+
+@router.get("/interview/history")
+def interview_history(limit: int = 10) -> dict:
+    return {"history": service.get_history(limit=limit)}

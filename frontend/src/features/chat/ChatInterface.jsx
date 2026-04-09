@@ -1,34 +1,30 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, Bot, User, Trash2, Sparkles } from 'lucide-react'
+import { Send, Loader2, Bot, User, Trash2, Sparkles, History, Plus } from 'lucide-react'
 import { mentorAPI } from '@/services/api'
 import { useApp, ACTIONS } from '@/context/AppContext'
 import { cn } from '@/lib/utils'
 
-const QUICK_PROMPTS = [
-  'What should I focus on this week?',
-  'Review my skill gaps and suggest resources',
-  'How do I prepare for system design interviews?',
-  'Give me a 30-day DSA plan',
-]
-
-const MOCK_RESPONSES = [
-  "Based on your skill profile, I recommend focusing on **System Design** and **Advanced DSA** this week. Your React skills are strong, but graph algorithms and DP need attention. Start with BFS/DFS problems on LeetCode.",
-  "Looking at your resume data, you have solid frontend skills. The key gaps are: System Design fundamentals, SQL optimization, and behavioral interview prep. I'd suggest Grokking System Design + 2 mock interviews this week.",
-  "For system design interviews, cover these in order: 1) Scalability basics, 2) Load balancers, 3) Databases (SQL vs NoSQL), 4) Caching (Redis), 5) Message queues. Practice designing Twitter, Uber, and YouTube clones.",
-  "Here's your 30-day DSA plan: Week 1 → Arrays & Strings, Week 2 → Linked Lists & Trees, Week 3 → Graphs & DP, Week 4 → Mock interviews daily. Aim for 2-3 problems per day minimum.",
-]
-
-let mockIdx = 0
-
 export default function ChatInterface() {
   const { state, dispatch } = useApp()
+  const topGaps = state.skillGaps || []
+  const chatContext = state.chatContext || {}
+  const quickPrompts = [
+    'What should I focus on this week?',
+    `How do I improve ${topGaps[0] || 'my top skill gap'}?`,
+    'Give me a 7-day roadmap from my current profile',
+    'How should I raise my interview score quickly?',
+  ]
   const [input,     setInput]     = useState('')
   const [loading,   setLoading]   = useState(false)
   const messagesEndRef = useRef(null)
 
   const messages = state.chatHistory
+  const archivedCount = state.chatSessions?.length || 0
+  const sessionLabel = state.activeChatSessionId
+    ? `Session ${String(state.activeChatSessionId).split('-').pop()}`
+    : 'Session'
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -47,8 +43,8 @@ export default function ChatInterface() {
         reply = res.message || res.response || res
       } catch {
         await new Promise((r) => setTimeout(r, 1200))
-        reply = MOCK_RESPONSES[mockIdx % MOCK_RESPONSES.length]
-        mockIdx++
+        const gapsText = topGaps.length ? topGaps.slice(0, 3).join(', ') : 'System Design, DSA, Communication'
+        reply = `Based on your current data, your focus should be **${gapsText}**. Current baseline: resume ${chatContext.avgResumeScore || 0}% and interview ${chatContext.avgInterviewScore || 0}%. For this week: 1) daily focused practice on top gap, 2) one mock interview every 2 days, 3) update one project bullet with measurable impact.`
       }
       dispatch({
         type: ACTIONS.ADD_MESSAGE,
@@ -66,6 +62,8 @@ export default function ChatInterface() {
   }
 
   const clearChat = () => dispatch({ type: ACTIONS.CLEAR_CHAT })
+  const openSession = (sessionId) => dispatch({ type: ACTIONS.OPEN_CHAT_SESSION, payload: sessionId })
+  const startNewSession = () => dispatch({ type: ACTIONS.START_NEW_CHAT_SESSION })
 
   const formatTime = (ts) =>
     new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
@@ -96,6 +94,7 @@ export default function ChatInterface() {
               <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
               <p className="text-xs text-muted">Online · Context-aware</p>
             </div>
+            <p className="text-[11px] text-muted/70 mt-0.5">{sessionLabel} · {archivedCount} archived</p>
           </div>
         </div>
         {messages.length > 0 && (
@@ -108,6 +107,28 @@ export default function ChatInterface() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto bg-card/50 border-x border-border px-4 py-6 space-y-4">
+        {state.chatSessions?.length > 0 && (
+          <div className="rounded-xl border border-border bg-surface/40 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-muted flex items-center gap-1"><History className="w-3.5 h-3.5" /> Previous sessions</p>
+              <button onClick={startNewSession} className="text-xs text-primary hover:underline flex items-center gap-1">
+                <Plus className="w-3 h-3" /> New
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {state.chatSessions.slice(0, 6).map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => openSession(s.id)}
+                  className="text-xs rounded-full border border-border px-3 py-1 text-muted hover:text-white hover:border-primary/40"
+                >
+                  {String(s.id).slice(-6)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center gap-4 py-8">
             <div className="w-16 h-16 rounded-2xl bg-secondary/15 border border-secondary/25 flex items-center justify-center">
@@ -121,7 +142,7 @@ export default function ChatInterface() {
             </div>
             {/* Quick prompts */}
             <div className="flex flex-wrap justify-center gap-2 mt-2">
-              {QUICK_PROMPTS.map((q) => (
+              {quickPrompts.map((q) => (
                 <button key={q} onClick={() => sendMessage(q)}
                   className="text-xs bg-surface border border-border text-muted hover:text-white hover:border-primary/40 px-3 py-2 rounded-lg transition-all duration-200">
                   {q}
@@ -198,7 +219,7 @@ export default function ChatInterface() {
         </div>
         {messages.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2">
-            {QUICK_PROMPTS.slice(0, 2).map((q) => (
+            {quickPrompts.slice(0, 2).map((q) => (
               <button key={q} type="button" onClick={() => sendMessage(q)}
                 className="text-xs text-muted hover:text-primary transition-colors truncate max-w-[200px]">
                 ↑ {q}

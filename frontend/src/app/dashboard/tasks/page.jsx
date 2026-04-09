@@ -5,7 +5,7 @@ import { CheckSquare, List, CalendarDays, BarChart2 } from 'lucide-react'
 import TaskList     from '@/features/tasks/TaskList'
 import WeeklyRoadmap from '@/features/tasks/WeeklyRoadmap'
 import { ProgressBar } from '@/components/ui'
-import { useApp } from '@/context/AppContext'
+import { useApp, ACTIONS } from '@/context/AppContext'
 import { cn } from '@/lib/utils'
 
 const TABS = [
@@ -16,11 +16,39 @@ const TABS = [
 
 export default function TasksPage() {
   const [activeTab, setActiveTab] = useState('today')
-  const { state } = useApp()
+  const { state, dispatch } = useApp()
 
   const total     = state.tasks.length
   const completed = state.tasks.filter((t) => t.completed).length
   const pct       = total ? Math.round((completed / total) * 100) : 0
+
+  const regenerateRoadmap = async () => {
+    try {
+      const response = await fetch('/api/system/roadmap/regenerate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: state.user?.id || 'demo-user',
+          skill_gaps: state.skillGaps || [],
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) return
+      const saved = data.state || {}
+      dispatch({
+        type: ACTIONS.SET_SYSTEM_INSIGHTS,
+        payload: {
+          tasks: saved.tasks || [],
+          roadmap: saved.roadmap || [],
+          notifications: saved.notifications || [],
+          skillGaps: saved.skill_gaps || [],
+          chatContext: saved.chat_context || {},
+        },
+      })
+    } catch {
+      // no-op
+    }
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -69,6 +97,12 @@ export default function TasksPage() {
             </button>
           )
         })}
+      </div>
+
+      <div className="flex justify-end">
+        <button onClick={regenerateRoadmap} className="btn-outline text-xs px-3 py-1.5">
+          Regenerate Roadmap
+        </button>
       </div>
 
       {/* Content */}

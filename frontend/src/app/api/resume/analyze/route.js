@@ -1,19 +1,20 @@
 import { NextResponse } from 'next/server';
-import { analyzeResume } from '@/lib/groq';
-import { parseFile, extractNameFromFilename } from '@/lib/parseFile';
-import { uploadResumeBuffer } from '@/lib/cloudinary';
-// In Supabase, you could store the session if you wanted, but for this generic route 
-// we will just return the analysis data directly to the frontend state
-// The frontend AppContext will handle saving to DB state if needed.
+import { extractNameFromFilename } from '@/lib/parseFile';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120; // 2 minutes max processing
 
 export async function POST(req) {
   try {
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+    if (!backendUrl) {
+      return NextResponse.json({ error: 'NEXT_PUBLIC_BACKEND_URL is not configured' }, { status: 500 });
+    }
+
     const formData = await req.formData();
     const file = formData.get('file'); // 'file' matches the FormData key in ResumeUpload.jsx
-    const jdText = formData.get('jdText') || "General Software Engineering Role"; // Optional JD override
+    const jdText = formData.get('jdText') || "General Software Engineering Role"; // Optional role hint
+    const targetSkillsRaw = formData.get('targetSkills') || '';
 
     if (!file) {
       return NextResponse.json(
@@ -23,38 +24,48 @@ export async function POST(req) {
     }
 
     const name = extractNameFromFilename(file.name);
-
-    // 1. Parse resume text
-    const resumeText = await parseFile(file);
-    if (!resumeText) {
-      throw new Error(`Could not extract text from ${file.name}`);
+    const uploadForm = new FormData();
+    uploadForm.append('file', file);
+    const uploadRes = await fetch(`${backendUrl}/resume/upload`, {
+      method: 'POST',
+      body: uploadForm,
+    });
+    const uploadData = await uploadRes.json();
+    if (!uploadRes.ok) {
+      return NextResponse.json({ error: uploadData?.detail || 'Resume upload failed' }, { status: uploadRes.status });
     }
 
-    // 2. Upload to Cloudinary (non-blocking)
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    let fileUrl = null;
-    try {
-      if (process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME) {
-         fileUrl = await uploadResumeBuffer(buffer, file.name);
-      }
-    } catch (e) {
-      console.warn(`Cloudinary upload failed for ${file.name}:`, e);
+    const analyzeRes = await fetch(`${backendUrl}/resume/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        file_id: uploadData.file_id,
+        role_target: jdText,
+        target_skills: String(targetSkillsRaw)
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+        use_llm: true,
+      }),
+    });
+    const analyzeData = await analyzeRes.json();
+    if (!analyzeRes.ok) {
+      return NextResponse.json({ error: analyzeData?.detail || 'Resume analysis failed' }, { status: analyzeRes.status });
     }
+    const analysis = analyzeData.analysis || {};
 
-    // 3. Analyze via Groq
-    const analysis = await analyzeResume(jdText, resumeText);
-
-    // 4. Return results (mapped to match our existing Mock Resume object shape)
+    // Return shape expected by existing UI components
     return NextResponse.json({
       name,
-      fileUrl,
-      resumeText,
-      score: analysis.score,
-      skills: [...analysis.strengths],      // Mapping strength to skills array for UI
-      weaknesses: [...analysis.gaps],        // Mapping gap to weaknesses array for UI
-      recommendations: [analysis.summary, ...analysis.gaps.map(g => `Address ${g}`)], 
-      domain: analysis.recommendation,       // using recommendation as domain (Fit text)
+      fileId: uploadData.file_id,
+      resultId: analyzeData.result_id,
+      fileUrl: null,
+      resumeText: uploadData.text_preview || '',
+      score: analysis.score || 0,
+      skills: analysis.skills || [],
+      weaknesses: analysis.weaknesses || [],
+      recommendations: analysis.recommended_roles || [],
+      domain: analysis.experience_level || 'unknown',
     }, { status: 200 });
 
   } catch (error) {

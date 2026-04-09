@@ -5,16 +5,6 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   BarChart, Bar, ResponsiveContainer, Legend,
 } from 'recharts'
-import { useApp } from '@/context/AppContext'
-
-// Mock weekly trend data
-const WEEKLY_TREND = [
-  { week: 'Week 1', readiness: 48, tasks: 40, interview: 55 },
-  { week: 'Week 2', readiness: 54, tasks: 52, interview: 62 },
-  { week: 'Week 3', readiness: 61, tasks: 58, interview: 68 },
-  { week: 'Week 4', readiness: 68, tasks: 65, interview: 74 },
-  { week: 'Week 5', readiness: 72, tasks: 58, interview: 81 },
-]
 
 const CUSTOM_TOOLTIP = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
@@ -31,10 +21,7 @@ const CUSTOM_TOOLTIP = ({ active, payload, label }) => {
   )
 }
 
-export default function ProgressCharts() {
-  const { state } = useApp()
-  const { skillData } = state.progress
-
+export default function ProgressCharts({ skillData = [], weeklyTrend = [], taskTrend = [] }) {
   const radarData = skillData.map((s) => ({ subject: s.name, A: s.level, fullMark: 100 }))
 
   return (
@@ -46,7 +33,7 @@ export default function ProgressCharts() {
           <h4 className="font-semibold text-white mb-1">Readiness Trend</h4>
           <p className="text-muted text-xs mb-5">5-week progress across all dimensions</p>
           <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={WEEKLY_TREND} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
+            <AreaChart data={weeklyTrend} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
               <defs>
                 <linearGradient id="readinessGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.3} />
@@ -87,16 +74,7 @@ export default function ProgressCharts() {
         <h4 className="font-semibold text-white mb-1">Weekly Task Completion</h4>
         <p className="text-muted text-xs mb-5">Tasks completed vs total across weeks</p>
         <ResponsiveContainer width="100%" height={200}>
-          <BarChart
-            data={[
-              { week: 'Week 1', completed: 8,  total: 14 },
-              { week: 'Week 2', completed: 11, total: 14 },
-              { week: 'Week 3', completed: 10, total: 14 },
-              { week: 'Week 4', completed: 13, total: 14 },
-              { week: 'Week 5', completed: 9,  total: 14 },
-            ]}
-            margin={{ top: 5, right: 10, bottom: 0, left: -20 }}
-          >
+          <BarChart data={taskTrend} margin={{ top: 5, right: 10, bottom: 0, left: -20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(99,102,241,0.1)" />
             <XAxis dataKey="week" tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={false} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={false} />

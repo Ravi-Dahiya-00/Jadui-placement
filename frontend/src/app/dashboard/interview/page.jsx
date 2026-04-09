@@ -17,6 +17,7 @@ export default function InterviewPage() {
   const [stage,       setStage]     = useState(STAGES.select)
   const [role,        setRole]      = useState('')
   const [questions,   setQuestions] = useState([])
+  const [interviewId, setInterviewId] = useState(null)
   const [feedback,    setFeedback]  = useState(null)
   const [loading,     setLoading]   = useState(false)
 
@@ -89,6 +90,7 @@ export default function InterviewPage() {
         })
         const data = await response.json()
         generatedQuestions = data.questions || []
+        if (data.interviewId) setInterviewId(data.interviewId)
       } catch (err) {
         console.warn('Backend generation failed, using fallback questions', err)
         generatedQuestions = ['Tell me about your background.', 'How do you handle conflict?']
@@ -118,13 +120,26 @@ export default function InterviewPage() {
     setCallStatus('FINISHED')
     setLoading(true)
 
+    if (!interviewId) {
+      setFeedback({
+        score: 0,
+        summary: 'Interview session ID missing. Please restart interview and try again.',
+        strengths: [],
+        improvements: ['Start a fresh session to enable database-backed feedback.'],
+        answers: []
+      });
+      setStage(STAGES.feedback);
+      setLoading(false);
+      return;
+    }
+
     // Send messages to backend to generate actual AI feedback scorecard
     try {
       const response = await fetch('/api/interview/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          interviewId: `iv-${Date.now()}`,
+          interviewId: interviewId,
           userId: state.user?.id || 'demo-user',
           transcript: messages
         })
@@ -158,6 +173,7 @@ export default function InterviewPage() {
     setStage(STAGES.select)
     setRole('')
     setQuestions([])
+    setInterviewId(null)
     setMessages([])
     setFeedback(null)
     setCallStatus('INACTIVE')

@@ -1,6 +1,3 @@
-import { generateText } from "ai";
-import { google } from "@ai-sdk/google";
-
 export async function GET() {
     return new Response(JSON.stringify({ success: true, data: "Interview Generate API OK" }), {
         status: 200,
@@ -20,41 +17,43 @@ export async function POST(request) {
             );
         }
 
-        const { text: questions } = await generateText({
-            model: google("gemini-2.0-flash-exp"), // Using Google GenAI as originally implemented in PulseAI
-            prompt: `Prepare questions for a job interview.
-                        The job role is ${role}.
-                        The job experience level is ${level || "not specified"}.
-                        The tech stack used in the job is: ${techstack || "not specified"}.
-                        The focus between behavioural and technical questions should lean towards: ${type || "balanced"}.
-                        The amount of questions required is: ${amount || "5"}.
-                        Please return only the questions as a JSON array: ["Question 1", "Question 2"].
-                        Do not include any extra text or special characters.`,
-        });
-
-        let parsedQuestions;
-        try {
-            parsedQuestions = JSON.parse(questions);
-            if (!Array.isArray(parsedQuestions)) {
-                throw new Error("Questions must be returned as an array");
-            }
-        } catch (e) {
-            console.error("Failed to parse questions:", questions);
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+        if (!backendUrl) {
             return new Response(
-                JSON.stringify({ success: false, error: "Invalid question format from model" }),
+                JSON.stringify({ success: false, error: "NEXT_PUBLIC_BACKEND_URL is not configured" }),
                 { status: 500, headers: { "Content-Type": "application/json" } }
             );
         }
+        const targetSkills =
+            typeof techstack === "string"
+                ? techstack.split(",").map((s) => s.trim()).filter(Boolean)
+                : [];
 
-        // We will mock saving the interview ID here instead of calling firebase.
-        // It should be handled seamlessly in Supabase if we want to save it persistently on the Frontend Action side.
-        const interviewId = `iv-${Date.now()}`;
+        const response = await fetch(`${backendUrl}/interview/start`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                role,
+                skills: targetSkills,
+                level: level || "not specified",
+                interview_type: type || "mixed",
+                question_count: amount || 5,
+                user_id: userid || null,
+            }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            return new Response(
+                JSON.stringify({ success: false, error: data?.detail || "Backend interview start failed" }),
+                { status: response.status, headers: { "Content-Type": "application/json" } }
+            );
+        }
 
         return new Response(
             JSON.stringify({
                 success: true,
-                interviewId: interviewId,
-                questions: parsedQuestions,
+                interviewId: data.session_id,
+                questions: data.questions || [],
             }),
             { status: 200, headers: { "Content-Type": "application/json" } }
         );

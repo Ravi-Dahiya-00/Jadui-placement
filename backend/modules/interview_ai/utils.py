@@ -55,19 +55,3 @@ class InterviewSession:
     questions: list[str]
     answers: list[AnswerEvaluation] = field(default_factory=list)
     created_at: str = field(default_factory=utc_now_iso)
-
-
-class InMemoryInterviewStore:
-    """Simple store to keep module independent from database coupling."""
-
-    def __init__(self) -> None:
-        self._sessions: dict[str, InterviewSession] = {}
-
-    def create(self, session: InterviewSession) -> None:
-        self._sessions[session.session_id] = session
-
-    def get(self, session_id: str) -> InterviewSession | None:
-        return self._sessions.get(session_id)
-
-
-store = InMemoryInterviewStore()

@@ -28,14 +28,35 @@ class ResumeParser:
             raise HTTPException(status_code=400, detail=f"Failed to parse file: {filename}") from exc
 
     def _parse_pdf(self, data: bytes) -> str:
+        errors: list[str] = []
+
+        # Primary parser: pypdf
         try:
             from pypdf import PdfReader  # type: ignore
-        except ImportError as exc:
-            raise HTTPException(status_code=500, detail="pypdf dependency missing") from exc
 
-        reader = PdfReader(bytes_to_stream(data))
-        text = " ".join((page.extract_text() or "") for page in reader.pages)
-        return normalize_space(text)
+            reader = PdfReader(bytes_to_stream(data))
+            text = " ".join((page.extract_text() or "") for page in reader.pages)
+            parsed = normalize_space(text)
+            if parsed:
+                return parsed
+            errors.append("pypdf returned empty text")
+        except Exception as exc:  # pragma: no cover - runtime parser variance
+            errors.append(f"pypdf failed: {exc}")
+
+        # Fallback parser: pdfplumber
+        try:
+            import pdfplumber  # type: ignore
+
+            with pdfplumber.open(bytes_to_stream(data)) as pdf:
+                text = " ".join((page.extract_text() or "") for page in pdf.pages)
+            parsed = normalize_space(text)
+            if parsed:
+                return parsed
+            errors.append("pdfplumber returned empty text")
+        except Exception as exc:  # pragma: no cover - runtime parser variance
+            errors.append(f"pdfplumber failed: {exc}")
+
+        raise HTTPException(status_code=400, detail=f"Failed to parse PDF. {' | '.join(errors)}")
 
     def _parse_docx(self, data: bytes) -> str:
         try:

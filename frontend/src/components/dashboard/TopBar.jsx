@@ -41,6 +41,22 @@ export default function TopBar() {
   const initials   = name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
   const unread     = state.notifications.filter((n) => !n.read).length
 
+  const markAsRead = async (notificationId) => {
+    dispatch({ type: ACTIONS.MARK_NOTIFICATION_READ, payload: notificationId })
+    try {
+      await fetch('/api/system/notifications/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: state.user?.id || 'demo-user',
+          notification_id: notificationId,
+        }),
+      })
+    } catch {
+      // optimistic UI
+    }
+  }
+
   const handleLogout = async () => {
     await signOut()
     localStorage.removeItem('auth_token')
@@ -87,10 +103,10 @@ export default function TopBar() {
                   <div className="px-4 py-6 text-center text-muted text-sm">No new notifications</div>
                 ) : (
                   state.notifications.slice(0, 5).map((n, i) => (
-                    <div key={i} className="px-4 py-3 hover:bg-surface/60 transition-colors border-b border-border/50 last:border-0">
+                    <button key={n.id || i} onClick={() => markAsRead(n.id || i)} className="w-full text-left px-4 py-3 hover:bg-surface/60 transition-colors border-b border-border/50 last:border-0">
                       <p className="text-sm text-white">{n.title}</p>
                       <p className="text-xs text-muted mt-0.5">{n.body}</p>
-                    </div>
+                    </button>
                   ))
                 )}
               </div>

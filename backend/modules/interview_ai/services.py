@@ -8,14 +8,13 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from backend.app.core.supabase_client import get_supabase_admin_client
 from .prompts import answer_evaluation_prompt, question_generation_prompt
 from .utils import (
     AnswerEvaluation,
-    InterviewSession,
     clamp_score,
     new_session_id,
     safe_json_loads,
-    store,
 )
 
 
@@ -87,6 +86,31 @@ class InterviewAIService:
             ],
         }
 
+    def _get_session_row(self, session_id: str) -> dict[str, Any]:
+        supabase = get_supabase_admin_client()
+        resp = (
+            supabase.table("interview_sessions")
+            .select("*")
+            .eq("id", session_id)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
+        if not rows:
+            raise HTTPException(status_code=404, detail="Interview session not found")
+        return rows[0]
+
+    def _get_answer_rows(self, session_id: str) -> list[dict[str, Any]]:
+        supabase = get_supabase_admin_client()
+        resp = (
+            supabase.table("interview_answers")
+            .select("*")
+            .eq("session_id", session_id)
+            .order("question_index")
+            .execute()
+        )
+        return resp.data or []
+
     def start_interview(
         self,
         role: str,
@@ -94,7 +118,7 @@ class InterviewAIService:
         level: str = "not specified",
         interview_type: str = "mixed",
         question_count: int = 5,
-    ) -> InterviewSession:
+    ) -> dict[str, Any]:
         if not role:
             raise HTTPException(status_code=400, detail="role is required")
         if question_count <= 0 or question_count > 20:
@@ -115,34 +139,48 @@ class InterviewAIService:
         except Exception:
             questions = self._fallback_question_set(role, skills, question_count)
 
-        session = InterviewSession(
-            session_id=new_session_id(),
-            role=role,
-            skills=skills,
-            level=level,
-            interview_type=interview_type,
-            questions=questions,
-        )
-        store.create(session)
-        return session
+        session_id = new_session_id()
+        supabase = get_supabase_admin_client()
+        supabase.table("interview_sessions").insert(
+            {
+                "id": session_id,
+                "role": role,
+                "skills": skills,
+                "level": level,
+                "interview_type": interview_type,
+                "questions": questions,
+            }
+        ).execute()
+        return {
+            "session_id": session_id,
+            "role": role,
+            "skills": skills,
+            "level": level,
+            "interview_type": interview_type,
+            "questions": questions,
+        }
 
     def submit_answer(self, session_id: str, question_index: int, answer: str) -> AnswerEvaluation:
-        session = store.get(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Interview session not found")
-        if question_index < 0 or question_index >= len(session.questions):
+        session = self._get_session_row(session_id)
+        questions = session.get("questions") or []
+        if question_index < 0 or question_index >= len(questions):
             raise HTTPException(status_code=400, detail="Invalid question_index")
         if not answer or not answer.strip():
             raise HTTPException(status_code=400, detail="answer is required")
 
-        question = session.questions[question_index]
-        prompt = answer_evaluation_prompt(question, answer, session.role, session.skills)
+        question = questions[question_index]
+        prompt = answer_evaluation_prompt(
+            question,
+            answer,
+            session.get("role", ""),
+            session.get("skills") or [],
+        )
 
         try:
             raw = self._llm_generate(prompt)
             data = safe_json_loads(raw)
         except Exception:
-            data = self._fallback_evaluation(question, answer, session.skills)
+            data = self._fallback_evaluation(question, answer, session.get("skills") or [])
 
         correctness = clamp_score(data.get("correctness", 0))
         clarity = clamp_score(data.get("clarity", 0))
@@ -162,33 +200,45 @@ class InterviewAIService:
             question=question,
             answer=answer.strip(),
         )
-        session.answers.append(evaluation)
+        get_supabase_admin_client().table("interview_answers").insert(
+            {
+                "session_id": session_id,
+                "question_index": question_index,
+                "question": question,
+                "answer": evaluation.answer,
+                "correctness": evaluation.correctness,
+                "clarity": evaluation.clarity,
+                "relevance": evaluation.relevance,
+                "overall": evaluation.overall,
+                "feedback": evaluation.feedback,
+                "suggestions": evaluation.suggestions,
+            }
+        ).execute()
         return evaluation
 
     def get_result(self, session_id: str) -> dict[str, Any]:
-        session = store.get(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Interview session not found")
+        session = self._get_session_row(session_id)
+        answers = self._get_answer_rows(session_id)
 
-        if not session.answers:
+        if not answers:
             return {
                 "session_id": session_id,
-                "role": session.role,
+                "role": session.get("role", ""),
                 "scores": {"correctness": 0, "clarity": 0, "relevance": 0, "overall": 0},
                 "summary_feedback": "No answers submitted yet.",
                 "answered_count": 0,
-                "total_questions": len(session.questions),
+                "total_questions": len(session.get("questions") or []),
                 "evaluations": [],
             }
 
-        correctness_avg = clamp_score(mean(item.correctness for item in session.answers))
-        clarity_avg = clamp_score(mean(item.clarity for item in session.answers))
-        relevance_avg = clamp_score(mean(item.relevance for item in session.answers))
-        overall_avg = clamp_score(mean(item.overall for item in session.answers))
+        correctness_avg = clamp_score(mean(int(item.get("correctness", 0)) for item in answers))
+        clarity_avg = clamp_score(mean(int(item.get("clarity", 0)) for item in answers))
+        relevance_avg = clamp_score(mean(int(item.get("relevance", 0)) for item in answers))
+        overall_avg = clamp_score(mean(int(item.get("overall", 0)) for item in answers))
 
         return {
             "session_id": session_id,
-            "role": session.role,
+            "role": session.get("role", ""),
             "scores": {
                 "correctness": correctness_avg,
                 "clarity": clarity_avg,
@@ -196,10 +246,44 @@ class InterviewAIService:
                 "overall": overall_avg,
             },
             "summary_feedback": "Focus on concise structure, role-relevant examples, and technical depth.",
-            "answered_count": len(session.answers),
-            "total_questions": len(session.questions),
-            "evaluations": [item.__dict__ for item in session.answers],
+            "answered_count": len(answers),
+            "total_questions": len(session.get("questions") or []),
+            "evaluations": answers,
         }
+
+    def get_history(self, limit: int = 10) -> list[dict[str, Any]]:
+        limit = max(1, min(limit, 50))
+        sessions_resp = (
+            get_supabase_admin_client()
+            .table("interview_sessions")
+            .select("*")
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        sessions = sessions_resp.data or []
+        history: list[dict[str, Any]] = []
+        for session in sessions:
+            session_id = session.get("id")
+            answers = self._get_answer_rows(session_id)
+            if answers:
+                overall = clamp_score(mean(int(item.get("overall", 0)) for item in answers))
+            else:
+                overall = 0
+            history.append(
+                {
+                    "session_id": session_id,
+                    "role": session.get("role", ""),
+                    "level": session.get("level", ""),
+                    "interview_type": session.get("interview_type", ""),
+                    "skills": session.get("skills") or [],
+                    "overall_score": overall,
+                    "answered_count": len(answers),
+                    "total_questions": len(session.get("questions") or []),
+                    "created_at": session.get("created_at", ""),
+                }
+            )
+        return history
 
 
 service = InterviewAIService()

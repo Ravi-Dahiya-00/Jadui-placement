@@ -44,3 +44,8 @@ def analyze_resume(payload: AnalyzeResumeRequest) -> dict:
 def get_resume_result(result_id: str) -> dict:
     result = service.get_result(result_id)
     return {"result": result.__dict__}
+
+
+@router.get("/resume/history")
+def get_resume_history(limit: int = 10) -> dict:
+    return {"history": service.get_history(limit=limit)}

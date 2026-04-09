@@ -1,71 +1,66 @@
 import { NextResponse } from 'next/server';
-import { generateObject } from 'ai';
-import { google } from '@ai-sdk/google';
-
-// We map the Zod/JSON schema format defined in PulseAI
-const feedbackSchema = {
-  type: 'object',
-  properties: {
-    totalScore: { type: 'number', description: 'Score out of 100 based on candidate performance' },
-    categoryScores: {
-      type: 'object',
-      properties: {
-        technical: { type: 'number' },
-        behavioral: { type: 'number' },
-        communication: { type: 'number' }
-      },
-      required: ['technical', 'behavioral', 'communication']
-    },
-    strengths: {
-      type: 'array',
-      items: { type: 'string' },
-      description: 'Top 3 strengths shown in the interview'
-    },
-    areasForImprovement: {
-      type: 'array',
-      items: { type: 'string' },
-      description: 'Areas where the candidate struggled'
-    },
-    finalAssessment: { type: 'string', description: 'A 2-3 sentence final summary of the performance' }
-  },
-  required: ['totalScore', 'categoryScores', 'strengths', 'areasForImprovement', 'finalAssessment']
-};
-
-export const maxDuration = 120; // Allow sufficient time for LLM parsing
 
 export async function POST(req) {
   try {
-    const { interviewId, userId, transcript } = await req.json();
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+    if (!backendUrl) {
+      return NextResponse.json({ error: 'NEXT_PUBLIC_BACKEND_URL is not configured' }, { status: 500 });
+    }
+
+    const { interviewId, transcript } = await req.json();
+    if (!interviewId) {
+      return NextResponse.json({ error: 'interviewId is required' }, { status: 400 });
+    }
 
     if (!transcript || transcript.length === 0) {
       return NextResponse.json({ error: 'Transcript is empty' }, { status: 400 });
     }
 
-    const formattedTranscript = transcript
-      .map(s => `- ${s.role}: ${s.content}\n`)
-      .join('');
+    const userAnswers = transcript.filter((t) => t.role === 'user' && t.content?.trim());
+    for (let i = 0; i < userAnswers.length; i += 1) {
+      const res = await fetch(`${backendUrl}/interview/answer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: interviewId,
+          question_index: i,
+          answer: userAnswers[i].content,
+        }),
+      });
+      if (!res.ok) {
+        break;
+      }
+    }
 
-    const { object } = await generateObject({
-      model: google('gemini-2.0-flash-exp'),
-      schema: feedbackSchema,
-      prompt: `You are an AI interviewer analyzing a mock voice interview. Evaluate their answers rigorously.
-      Transcript: ${formattedTranscript}`,
-      system: 'You are a professional HR recruiter and technical interviewer analyzing a mock interview transcript.',
+    const resultRes = await fetch(`${backendUrl}/interview/result?session_id=${encodeURIComponent(interviewId)}`, {
+      method: 'GET',
     });
+    const resultData = await resultRes.json();
+    if (!resultRes.ok) {
+      return NextResponse.json({ error: resultData?.detail || 'Failed to fetch interview result' }, { status: resultRes.status });
+    }
 
-    // In a full production Supabase implementation, we would insert `object` into `feedback` table here.
-    // For now we map it exactly to the frontend Dashboard's expected format.
+    const evaluations = resultData.evaluations || [];
+    const overall = resultData?.scores?.overall || 0;
+    const strengths = evaluations
+      .filter((e) => Number(e.overall || 0) >= 70)
+      .slice(0, 3)
+      .map((e) => `Strong response on: ${e.question}`);
+    const improvements = evaluations
+      .filter((e) => Number(e.overall || 0) < 70)
+      .slice(0, 3)
+      .map((e) => e.feedback || `Improve answer for: ${e.question}`);
 
     const mappedFeedback = {
-      score: object.totalScore,
-      summary: object.finalAssessment,
-      strengths: object.strengths,
-      improvements: object.areasForImprovement,
-      answers: transcript.filter(t => t.role === 'user').map(t => ({
-          question: 'Candidate Spoke:',
-          score: Math.round(object.totalScore * (0.8 + Math.random() * 0.4)), // mock score per answer
-          feedback: t.content
-      }))
+      score: overall,
+      summary: resultData.summary_feedback || 'Interview analysis completed.',
+      strengths: strengths.length ? strengths : ['Consistent participation in the interview session.'],
+      improvements: improvements.length ? improvements : ['Provide more detailed and structured responses.'],
+      answers: evaluations.map((e) => ({
+        question: e.question,
+        score: e.overall,
+        feedback: e.feedback,
+      })),
     };
 
     return NextResponse.json({ success: true, feedback: mappedFeedback }, { status: 200 });

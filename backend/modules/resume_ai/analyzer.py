@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from .prompts import semantic_resume_analysis_prompt
+from .prompts import resume_cleanup_prompt, semantic_resume_analysis_prompt
 from .utils import normalize_space, safe_json_from_text
 
 
@@ -73,9 +73,8 @@ class ResumeAnalyzer:
         extracted = {s.lower() for s in extracted_skills}
         return [s for s in target_skills if s.lower() not in extracted]
 
-    def _llm_semantic_analysis(self, resume_text: str, role_target: str, target_skills: list[str]) -> dict[str, Any]:
+    def _llm_json(self, prompt: str) -> dict[str, Any]:
         provider = os.getenv("AI_PROVIDER", "openai").lower()
-        prompt = semantic_resume_analysis_prompt(resume_text, role_target, target_skills)
 
         if provider == "gemini":
             try:
@@ -101,6 +100,14 @@ class ResumeAnalyzer:
         resp = client.responses.create(model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"), input=prompt)
         return safe_json_from_text(resp.output_text or "{}")
 
+    def _llm_cleanup_resume(self, raw_resume_text: str) -> dict[str, Any]:
+        prompt = resume_cleanup_prompt(raw_resume_text)
+        return self._llm_json(prompt)
+
+    def _llm_semantic_analysis(self, resume_text: str, role_target: str, target_skills: list[str]) -> dict[str, Any]:
+        prompt = semantic_resume_analysis_prompt(resume_text, role_target, target_skills)
+        return self._llm_json(prompt)
+
     def analyze(
         self,
         resume_text: str,
@@ -109,9 +116,47 @@ class ResumeAnalyzer:
         use_llm: bool = True,
     ) -> dict[str, Any]:
         cleaned = normalize_space(resume_text)
-        skills = self.extract_skills(cleaned)
-        projects = self.extract_projects(resume_text)
-        exp = self.infer_experience_level(cleaned)
+        cleanup_payload: dict[str, Any] = {}
+        cleaned_for_analysis = cleaned
+        llm_skills_hint: list[str] = []
+        llm_projects_hint: list[str] = []
+        llm_experience_years = 0
+
+        if use_llm:
+            try:
+                cleanup_payload = self._llm_cleanup_resume(cleaned[:12000])
+                cleaned_for_analysis = normalize_space(
+                    str(cleanup_payload.get("normalized_text", cleaned))
+                ) or cleaned
+                llm_skills_hint = [
+                    str(item).strip().lower()
+                    for item in (cleanup_payload.get("skills") or [])
+                    if str(item).strip()
+                ]
+                llm_projects_hint = [
+                    str(item).strip()
+                    for item in (cleanup_payload.get("projects") or [])
+                    if str(item).strip()
+                ]
+                llm_experience_years = int(cleanup_payload.get("experience_years", 0) or 0)
+            except Exception:
+                cleaned_for_analysis = cleaned
+
+        deterministic_skills = self.extract_skills(cleaned_for_analysis)
+        skills = sorted(set(deterministic_skills + llm_skills_hint))
+        projects = (self.extract_projects(cleaned_for_analysis) + llm_projects_hint)[:5]
+        if llm_experience_years > 0:
+            exp = (
+                "lead"
+                if llm_experience_years >= 10
+                else "senior"
+                if llm_experience_years >= 6
+                else "mid"
+                if llm_experience_years >= 3
+                else "junior"
+            )
+        else:
+            exp = self.infer_experience_level(cleaned_for_analysis)
         gap = self.compute_skill_gap(skills, target_skills)
 
         deterministic = {
@@ -132,7 +177,7 @@ class ResumeAnalyzer:
             return deterministic
 
         try:
-            semantic = self._llm_semantic_analysis(cleaned[:12000], role_target, target_skills)
+            semantic = self._llm_semantic_analysis(cleaned_for_analysis[:12000], role_target, target_skills)
             return {
                 "skills": skills,
                 "projects": projects,

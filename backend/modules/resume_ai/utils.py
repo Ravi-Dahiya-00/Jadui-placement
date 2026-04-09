@@ -1,4 +1,4 @@
-"""Utility helpers and in-memory store for resume module."""
+"""Utility helpers and typed models for resume module."""
 
 from __future__ import annotations
 
@@ -68,27 +68,6 @@ class ResumeAnalysisRecord:
     skill_gap: list[str]
     score: int
     created_at: str = field(default_factory=utc_now_iso)
-
-
-class InMemoryResumeStore:
-    def __init__(self) -> None:
-        self.files: dict[str, ResumeFileRecord] = {}
-        self.results: dict[str, ResumeAnalysisRecord] = {}
-
-    def put_file(self, record: ResumeFileRecord) -> None:
-        self.files[record.file_id] = record
-
-    def get_file(self, file_id: str) -> ResumeFileRecord | None:
-        return self.files.get(file_id)
-
-    def put_result(self, record: ResumeAnalysisRecord) -> None:
-        self.results[record.result_id] = record
-
-    def get_result(self, result_id: str) -> ResumeAnalysisRecord | None:
-        return self.results.get(result_id)
-
-
-store = InMemoryResumeStore()
 
 
 def bytes_to_stream(data: bytes) -> io.BytesIO:

@@ -1,5 +1,6 @@
 import { CheckCircle2, Clock, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useApp } from '@/context/AppContext'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -41,9 +42,12 @@ const STATUS_STYLES = {
 }
 
 export default function WeeklyRoadmap() {
+  const { state } = useApp()
+  const roadmap = state.roadmap?.length ? state.roadmap : ROADMAP
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
-      {ROADMAP.map((day) => {
+      {roadmap.map((day) => {
         const s    = STATUS_STYLES[day.status]
         const Icon = s.icon
         return (
