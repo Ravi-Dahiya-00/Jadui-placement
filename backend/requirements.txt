@@ -4,6 +4,8 @@ pydantic
 python-multipart
 openai
 google-generativeai
+httpx
+python-dateutil
 pypdf
 pdfplumber
 python-docx

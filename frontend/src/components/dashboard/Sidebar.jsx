@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, FileText, CheckSquare, Mic,
   MessageSquare, TrendingUp, Zap, LogOut,
-  ChevronLeft, ChevronRight, User,
+  ChevronLeft, ChevronRight, User, Github,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/lib/supabase'
@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { label: 'Resume Analysis', href: '/dashboard/resume',   icon: FileText        },
   { label: 'Task Planner',    href: '/dashboard/tasks',    icon: CheckSquare     },
   { label: 'Mock Interview',  href: '/dashboard/interview',icon: Mic             },
+  { label: 'GitHub profile',  href: '/dashboard/github-profile', icon: Github },
   { label: 'AI Mentor Chat',  href: '/dashboard/chat',     icon: MessageSquare   },
   { label: 'Progress',        href: '/dashboard/progress', icon: TrendingUp      },
 ]

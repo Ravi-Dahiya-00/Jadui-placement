@@ -6,6 +6,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field, ConfigDict
 
 from .services import service
+from .intelligence import intelligence_service
 
 router = APIRouter(tags=["system-ai"])
 
@@ -94,3 +95,13 @@ def mark_notification_read(payload: MarkNotificationReadRequest) -> dict:
 @router.post("/system/roadmap/regenerate")
 def regenerate_roadmap(payload: RegenerateRoadmapRequest) -> dict:
     return {"state": service.regenerate_roadmap(payload.user_id, payload.skill_gaps)}
+
+
+@router.get("/system/readiness")
+def get_readiness_scorecard(user_id: str, github_username: str | None = None):
+    return intelligence_service.get_readiness_radar(user_id, github_username)
+
+
+@router.get("/system/suggestions")
+def get_career_suggestions(github_username: str):
+    return {"suggestions": intelligence_service.get_placement_suggestions(github_username)}

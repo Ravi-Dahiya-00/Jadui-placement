@@ -2,11 +2,23 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Target, CheckSquare, Mic, Flame, ArrowRight } from 'lucide-react'
+import { Target, CheckSquare, Mic, Flame, ArrowRight, Sparkles } from 'lucide-react'
 import StatCard       from '@/components/dashboard/StatCard'
 import { ProgressBar } from '@/components/ui'
 import { useApp, ACTIONS } from '@/context/AppContext'
 import { cn } from '@/lib/utils'
+import {
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Radar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Tooltip,
+} from 'recharts'
 
 const CATEGORY_COLORS = {
   DSA:       'text-primary bg-primary/10',
@@ -55,6 +67,9 @@ export default function DashboardPage() {
     }
     loadStats()
   }, [])
+
+  const [readinessData, setReadinessData] = useState(null)
+  const [careerSuggestions, setCareerSuggestions] = useState([])
 
   const derived = useMemo(() => {
     const latestResume = resumeHistory[0] || null
@@ -177,6 +192,35 @@ export default function DashboardPage() {
     }))
     return points
   }, [derived.readiness])
+
+  useEffect(() => {
+    const loadReadiness = async () => {
+      if (!state.user?.id) return
+      try {
+        const githubUsername = state.chatContext?.githubUsername || ''
+        const url = `/api/system/readiness?user_id=${state.user.id}${githubUsername ? `&github_username=${githubUsername}` : ''}`
+        const res = await fetch(url)
+        const d = await res.json()
+        if (res.ok) {
+          setReadinessData([
+            { subject: 'Resume', A: d.resume, fullMark: 100 },
+            { subject: 'Technical', A: d.technical, fullMark: 100 },
+            { subject: 'Interview', A: d.interview, fullMark: 100 },
+            { subject: 'Consistency', A: d.consistency, fullMark: 100 },
+          ])
+        }
+        
+        if (githubUsername) {
+          const sugRes = await fetch(`/api/system/suggestions?github_username=${githubUsername}`)
+          const sugData = await sugRes.json()
+          if (sugRes.ok) setCareerSuggestions(sugData.suggestions || [])
+        }
+      } catch (err) {
+        console.error('Failed to load readiness mapping:', err)
+      }
+    }
+    loadReadiness()
+  }, [state.user?.id, state.chatContext?.githubUsername, resumeHistory.length, interviewHistory.length])
 
   const sparklinePath = useMemo(() => {
     if (!readinessTrend.length) return ''
@@ -353,6 +397,19 @@ export default function DashboardPage() {
             <p className="text-xs uppercase tracking-wider text-primary font-semibold mb-1">Next Best Action</p>
             <p className="text-sm text-white">{nextBestAction}</p>
           </div>
+          
+          {careerSuggestions.length > 0 && (
+            <div className="mt-4 space-y-2">
+              <p className="text-xs uppercase tracking-wider text-secondary font-semibold mb-1 flex items-center gap-1">
+                <Sparkles className="w-3 h-3" /> AI Career Mentor Tips
+              </p>
+              {careerSuggestions.map((sug, i) => (
+                <div key={i} className="text-sm text-muted bg-surface/30 rounded-lg p-3 border border-border/50">
+                  {sug}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="bg-card border border-border rounded-xl p-5">
           <h3 className="font-semibold text-white mb-3">Risk Alerts</h3>
@@ -392,14 +449,33 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="bg-card border border-border rounded-xl p-5">
-          <h3 className="font-semibold text-white mb-3">Readiness Trend (7 days)</h3>
-          <div className="rounded-lg border border-border bg-surface/30 p-3">
-            <svg viewBox="0 0 100 100" className="w-full h-24">
-              <path d={sparklinePath} fill="none" stroke="currentColor" className="text-primary" strokeWidth="2.5" />
-            </svg>
-            <p className="text-xs text-muted mt-2">Current: <span className="text-white font-semibold">{derived.readiness}%</span></p>
-          </div>
+        <div className="bg-card border border-border rounded-xl p-5 flex flex-col">
+          <h3 className="font-semibold text-white mb-3">Readiness Radar</h3>
+          {readinessData ? (
+            <div className="flex-1 flex items-center justify-center">
+              <ResponsiveContainer width="100%" height={220}>
+                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={readinessData}>
+                  <PolarGrid stroke="rgba(255,255,255,0.05)" />
+                  <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                  <Radar
+                    name="Readiness"
+                    dataKey="A"
+                    stroke="#438ee9"
+                    fill="#438ee9"
+                    fillOpacity={0.4}
+                  />
+                  <Tooltip
+                    contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', fontSize: '10px' }}
+                  />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-xs text-muted">
+              Connect GitHub & Resume for Radar scan
+            </div>
+          )}
         </div>
 
         <div className="bg-card border border-border rounded-xl p-5">
@@ -547,11 +623,12 @@ export default function DashboardPage() {
       {/* Quick actions */}
       <div>
         <h3 className="font-semibold text-white mb-4">Quick Actions</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {[
             { label: 'Upload Resume',   href: '/dashboard/resume',    emoji: '📄', color: 'hover:border-primary/40 hover:bg-primary/5'    },
             { label: 'Start Interview', href: '/dashboard/interview', emoji: '🎤', color: 'hover:border-accent/40 hover:bg-accent/5'      },
             { label: 'Ask AI Mentor',   href: '/dashboard/chat',      emoji: '🧠', color: 'hover:border-secondary/40 hover:bg-secondary/5'},
+            { label: 'GitHub profile',  href: '/dashboard/github-profile', emoji: '🐙', color: 'hover:border-primary/40 hover:bg-primary/5' },
             { label: 'View Progress',   href: '/dashboard/progress',  emoji: '📈', color: 'hover:border-success/40 hover:bg-success/5'    },
           ].map((action) => (
             <Link

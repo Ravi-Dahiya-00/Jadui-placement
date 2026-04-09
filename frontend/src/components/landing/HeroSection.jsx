@@ -48,10 +48,10 @@ export default function HeroSection() {
   return (
     <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden pt-16">
       {/* Animated background orbs */}
-      <div className="orb w-[600px] h-[600px] bg-primary/12 top-[-150px] left-[-100px] animate-orb-move" />
-      <div className="orb w-[500px] h-[500px] bg-secondary/10 bottom-[-100px] right-[-80px]"
+      <div className="orb w-[600px] h-[600px] bg-primary/20 top-[-150px] left-[-100px] animate-orb-move blur-[100px]" />
+      <div className="orb w-[500px] h-[500px] bg-secondary/15 bottom-[-100px] right-[-80px] blur-[80px]"
            style={{ animation: 'orb-move 15s ease-in-out infinite alternate-reverse' }} />
-      <div className="orb w-[300px] h-[300px] bg-accent/8 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+      <div className="orb w-[300px] h-[300px] bg-accent/10 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 blur-[120px]" />
 
       <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 text-center">
         {/* Announcement badge */}

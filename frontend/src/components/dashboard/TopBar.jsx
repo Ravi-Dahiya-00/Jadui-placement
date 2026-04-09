@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Bell, Search, Menu, X, Zap,
          LayoutDashboard, FileText, CheckSquare,
-         Mic, MessageSquare, TrendingUp, LogOut } from 'lucide-react'
+         Mic, MessageSquare, TrendingUp, LogOut, Github } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/lib/supabase'
 import { useApp, ACTIONS } from '@/context/AppContext'
@@ -17,6 +17,7 @@ const PAGE_TITLES = {
   '/dashboard/interview':'Mock Interview',
   '/dashboard/chat':     'AI Mentor Chat',
   '/dashboard/progress': 'Progress Tracker',
+  '/dashboard/github-profile': 'GitHub profile analytics',
 }
 
 const MOB_NAV = [
@@ -25,6 +26,7 @@ const MOB_NAV = [
   { label: 'Tasks',     href: '/dashboard/tasks',    icon: CheckSquare     },
   { label: 'Interview', href: '/dashboard/interview',icon: Mic             },
   { label: 'Chat',      href: '/dashboard/chat',     icon: MessageSquare   },
+  { label: 'GitHub',    href: '/dashboard/github-profile', icon: Github },
   { label: 'Progress',  href: '/dashboard/progress', icon: TrendingUp      },
 ]
 
