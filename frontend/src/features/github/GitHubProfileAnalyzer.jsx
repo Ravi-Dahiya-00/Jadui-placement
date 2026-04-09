@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useApp, ACTIONS } from '@/context/AppContext'
 import {
   Github,
@@ -83,6 +83,11 @@ export default function GitHubProfileAnalyzer() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [data, setData] = useState(null)
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   const langRepoData = useMemo(() => toChartData(data?.langRepoCount), [data])
   const langCommitData = useMemo(() => toChartData(data?.langCommitCount), [data])
@@ -209,14 +214,21 @@ export default function GitHubProfileAnalyzer() {
         </form>
 
         {error ? (
-          <p className="mt-4 text-sm text-error">{error}</p>
+          <div className="mt-4 p-4 rounded-xl border border-error/20 bg-error/5">
+            <p className="text-sm text-error">{error}</p>
+            {error.toLowerCase().includes('rate limit') && (
+              <p className="text-xs text-muted mt-2">
+                Tip: Create a <a href="https://github.com/settings/tokens" target="_blank" rel="noreferrer" className="text-primary hover:underline">Personal Access Token</a> and set it as `GITHUB_TOKEN` in your environment.
+              </p>
+            )}
+          </div>
         ) : null}
         <p className="text-xs text-muted mt-3">
-          Set <code className="text-accent/90">GITHUB_TOKEN</code> on Render for higher rate limits. Public data only.
+          Set <code className="text-accent/90">GITHUB_TOKEN</code> for higher rate limits. Public data only.
         </p>
       </div>
 
-      {data && user && (
+      {isMounted && data && user && (
         <div className="space-y-8 animate-slide-up">
           {/* Header card */}
           <div className="rounded-2xl border border-border bg-card p-6 flex flex-col md:flex-row gap-6">

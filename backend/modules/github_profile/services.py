@@ -114,7 +114,13 @@ def _fetch_paginated(client: httpx.Client, url: str, params: dict[str, Any] | No
             break
         r = client.get(next_url, params=next_params, headers=_headers(), timeout=60.0)
         if r.status_code == 403:
-            raise HTTPException(status_code=503, detail="GitHub API rate limit or access denied. Set GITHUB_TOKEN on the backend.")
+            has_token = bool(_headers().get("Authorization"))
+            msg = "GitHub API rate limit or access denied."
+            if not has_token:
+                msg += " Set GITHUB_TOKEN on the backend to increase limits."
+            else:
+                msg += " Your current token might have expired or has insufficient permissions."
+            raise HTTPException(status_code=503, detail=msg)
         if r.status_code != 200:
             break
         data = r.json()
