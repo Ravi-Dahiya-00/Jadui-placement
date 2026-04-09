@@ -76,12 +76,8 @@ export const interviewAPI = {
 }
 
 // ─── AI Mentor Chat ────────────────────────────────────────────
-
-export const mentorAPI = {
-  /** Send a message and get a contextual response */
-  chat: (message, history = []) =>
-    api.post('/mentor/chat', { message, history }),
-}
+// Mentor uses the Next.js route `POST /api/mentor/chat` (Gemini + dashboard context).
+// Call `fetch('/api/mentor/chat', ...)` from client components — not the FastAPI base URL.
 
 // ─── Progress Module ───────────────────────────────────────────
 

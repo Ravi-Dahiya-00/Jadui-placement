@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Send, Loader2, Bot, User, Trash2, Sparkles, History, Plus } from 'lucide-react'
-import { mentorAPI } from '@/services/api'
 import { useApp, ACTIONS } from '@/context/AppContext'
 import { cn } from '@/lib/utils'
 
@@ -10,6 +9,18 @@ export default function ChatInterface() {
   const { state, dispatch } = useApp()
   const topGaps = state.skillGaps || []
   const chatContext = state.chatContext || {}
+  const resumeSnapshot = state.resumeData
+    ? {
+        score: state.resumeData.score,
+        role_target: state.resumeData.role_target,
+        summary: state.resumeData.summary,
+        overall_feedback: state.resumeData.overall_feedback,
+        detailed_review:
+          typeof state.resumeData.detailed_review === 'string'
+            ? state.resumeData.detailed_review
+            : state.resumeData.detailed_review?.text || '',
+      }
+    : null
   const quickPrompts = [
     'What should I focus on this week?',
     `How do I improve ${topGaps[0] || 'my top skill gap'}?`,
@@ -23,7 +34,7 @@ export default function ChatInterface() {
   const messages = state.chatHistory
   const archivedCount = state.chatSessions?.length || 0
   const sessionLabel = state.activeChatSessionId
-    ? `Session ${String(state.activeChatSessionId).split('-').pop()}`
+    ? `Session · ${String(state.activeChatSessionId).replace(/^chat-/, '').slice(-8)}`
     : 'Session'
 
   useEffect(() => {
@@ -37,18 +48,44 @@ export default function ChatInterface() {
     setLoading(true)
 
     try {
-      let reply
-      try {
-        const res = await mentorAPI.chat(text, messages)
-        reply = res.message || res.response || res
-      } catch {
-        await new Promise((r) => setTimeout(r, 1200))
-        const gapsText = topGaps.length ? topGaps.slice(0, 3).join(', ') : 'System Design, DSA, Communication'
-        reply = `Based on your current data, your focus should be **${gapsText}**. Current baseline: resume ${chatContext.avgResumeScore || 0}% and interview ${chatContext.avgInterviewScore || 0}%. For this week: 1) daily focused practice on top gap, 2) one mock interview every 2 days, 3) update one project bullet with measurable impact.`
-      }
+      const historyPayload = messages.map((m) => ({
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        content: typeof m.content === 'string' ? m.content : '',
+      }))
+      const res = await fetch('/api/mentor/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: text,
+          history: historyPayload,
+          context: {
+            userId: state.user?.id || 'demo-user',
+            skillGaps: state.skillGaps || [],
+            chatContext,
+            progress: state.progress || {},
+            tasks: state.tasks || [],
+            roadmap: state.roadmap || [],
+            notifications: (state.notifications || []).slice(0, 8),
+            resumeSnapshot,
+          },
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      const reply =
+        data?.message ||
+        `I could not reach the mentor service (${data?.error || res.statusText || 'error'}). Check **GEMINI_API_KEY** on Vercel and **NEXT_PUBLIC_BACKEND_URL** for dashboard history.`
       dispatch({
         type: ACTIONS.ADD_MESSAGE,
         payload: { role: 'assistant', content: reply, timestamp: new Date() },
+      })
+    } catch (err) {
+      dispatch({
+        type: ACTIONS.ADD_MESSAGE,
+        payload: {
+          role: 'assistant',
+          content: `**Network error** — ${err?.message || 'Could not reach the mentor'}. Check your connection and try again.`,
+          timestamp: new Date(),
+        },
       })
     } finally {
       setLoading(false)
