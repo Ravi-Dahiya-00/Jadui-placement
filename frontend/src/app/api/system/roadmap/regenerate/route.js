@@ -7,7 +7,7 @@ export async function POST(req) {
       return NextResponse.json({ error: 'NEXT_PUBLIC_BACKEND_URL is not configured' }, { status: 500 });
     }
     const payload = await req.json();
-    const response = await fetch(`${backendUrl}/system/roadmap/regenerate`, {
+    const response = await fetch(`${backendUrl}/api/system/roadmap/regenerate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

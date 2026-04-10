@@ -26,7 +26,7 @@ export async function POST(req) {
     const name = extractNameFromFilename(file.name);
     const uploadForm = new FormData();
     uploadForm.append('file', file);
-    const uploadRes = await fetch(`${backendUrl}/resume/upload`, {
+    const uploadRes = await fetch(`${backendUrl}/api/resume/upload`, {
       method: 'POST',
       body: uploadForm,
     });
@@ -35,7 +35,7 @@ export async function POST(req) {
       return NextResponse.json({ error: uploadData?.detail || 'Resume upload failed' }, { status: uploadRes.status });
     }
 
-    const analyzeRes = await fetch(`${backendUrl}/resume/analyze`, {
+    const analyzeRes = await fetch(`${backendUrl}/api/resume/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

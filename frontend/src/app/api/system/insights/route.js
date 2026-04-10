@@ -91,7 +91,7 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('user_id') || 'demo-user';
 
-    const stateRes = await fetch(`${backendUrl}/system/state?user_id=${encodeURIComponent(userId)}`, {
+    const stateRes = await fetch(`${backendUrl}/api/system/state?user_id=${encodeURIComponent(userId)}`, {
       method: 'GET',
       cache: 'no-store',
     });
@@ -116,8 +116,8 @@ export async function GET(req) {
     }
 
     const [resumeRes, interviewRes] = await Promise.all([
-      fetch(`${backendUrl}/resume/history?limit=20`, { method: 'GET', cache: 'no-store' }),
-      fetch(`${backendUrl}/interview/history?limit=20`, { method: 'GET', cache: 'no-store' }),
+      fetch(`${backendUrl}/api/resume/history?limit=20&user_id=${encodeURIComponent(userId)}`, { method: 'GET', cache: 'no-store' }),
+      fetch(`${backendUrl}/api/interview/history?limit=20&user_id=${encodeURIComponent(userId)}`, { method: 'GET', cache: 'no-store' }),
     ]);
     const resumePayload = await resumeRes.json();
     const interviewPayload = await interviewRes.json();
@@ -164,7 +164,7 @@ export async function GET(req) {
       activeChatSessionId: `chat-${Date.now()}`,
     };
 
-    await fetch(`${backendUrl}/system/state`, {
+    await fetch(`${backendUrl}/api/system/state`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

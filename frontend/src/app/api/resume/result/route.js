@@ -13,7 +13,7 @@ export async function GET(req) {
       return NextResponse.json({ error: 'resultId is required' }, { status: 400 });
     }
 
-    const response = await fetch(`${backendUrl}/resume/result?result_id=${encodeURIComponent(resultId)}`, {
+    const response = await fetch(`${backendUrl}/api/resume/result?result_id=${encodeURIComponent(resultId)}`, {
       method: 'GET',
       cache: 'no-store',
     });

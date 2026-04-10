@@ -23,7 +23,7 @@ export async function GET(request) {
     qs.set('username', username)
     if (insights) qs.set('insights', 'true')
 
-    const url = `${backendUrl.replace(/\/$/, '')}/github/profile?${qs}`
+    const url = `${backendUrl.replace(/\/$/, '')}/api/github/profile?${qs}`
     const res = await fetch(url, { method: 'GET', cache: 'no-store' })
     const data = await res.json().catch(() => ({}))
 

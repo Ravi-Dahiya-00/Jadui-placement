@@ -41,7 +41,7 @@ export async function POST(req) {
 
     const userAnswers = transcript.filter((t) => t.role === 'user' && t.content?.trim());
     for (let i = 0; i < userAnswers.length; i += 1) {
-      const res = await fetch(`${backendUrl}/interview/answer`, {
+      const res = await fetch(`${backendUrl}/api/interview/answer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -55,7 +55,7 @@ export async function POST(req) {
       }
     }
 
-    const resultRes = await fetch(`${backendUrl}/interview/result?session_id=${encodeURIComponent(interviewId)}`, {
+    const resultRes = await fetch(`${backendUrl}/api/interview/result?session_id=${encodeURIComponent(interviewId)}`, {
       method: 'GET',
     });
     const resultData = await resultRes.json();

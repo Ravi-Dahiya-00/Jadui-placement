@@ -29,7 +29,7 @@ export async function POST(request) {
                 ? techstack.split(",").map((s) => s.trim()).filter(Boolean)
                 : [];
 
-        const response = await fetch(`${backendUrl}/interview/start`, {
+        const response = await fetch(`${backendUrl}/api/interview/start`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
