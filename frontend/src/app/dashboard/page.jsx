@@ -107,7 +107,12 @@ export default function DashboardPage() {
     setIsMounted(true)
   }, [state.user?.id, state.chatContext?.githubUsername])
 
-  const [readinessData, setReadinessData] = useState([])
+  const [readinessData, setReadinessData] = useState([
+    { subject: 'Resume', A: 0, value: 0, fullMark: 100 },
+    { subject: 'Technical', A: 0, value: 0, fullMark: 100 },
+    { subject: 'Interview', A: 0, value: 0, fullMark: 100 },
+    { subject: 'Consistency', A: 0, value: 0, fullMark: 100 },
+  ])
   const [careerSuggestions, setCareerSuggestions] = useState([])
   const [loadingRadar, setLoadingRadar] = useState(false)
 
