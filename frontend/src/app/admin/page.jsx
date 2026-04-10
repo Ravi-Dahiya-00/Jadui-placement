@@ -20,16 +20,17 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     async function fetchData() {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
       try {
         const [statsRes, studentsRes] = await Promise.all([
-          fetch('/api/admin/stats'),
-          fetch('/api/admin/students')
+          fetch(`${backendUrl}/api/admin/stats`),
+          fetch(`${backendUrl}/api/admin/students`)
         ])
         const statsData = await statsRes.json()
         const studentsData = await studentsRes.json()
         
-        setStats(statsData.stats)
-        setStudents(studentsData.students)
+        setStats(statsData.stats || null)
+        setStudents(studentsData.students || [])
       } catch (err) {
         console.error('Failed to fetch admin data', err)
       } finally {
@@ -44,8 +45,9 @@ export default function AdminDashboard() {
     if (!searchTerm) return
     setIsSimulating(true)
     setLoading(true)
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
     try {
-      const res = await fetch(`/api/admin/simulate/hiring?q=${searchTerm}`)
+      const res = await fetch(`${backendUrl}/api/admin/simulate/hiring?q=${searchTerm}`)
       const data = await res.json()
       setStudents(data.ranked || [])
     } catch (err) {

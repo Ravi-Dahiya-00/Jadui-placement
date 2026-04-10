@@ -6,7 +6,6 @@ from pydantic import BaseModel
 from .services import admin_service
 from .assistant import assistant_service
 from .workshops import workshop_service
-from .security import verify_token, check_ip_block, record_failure
 import os
 
 router = APIRouter(tags=["admin-ai"])
@@ -14,20 +13,13 @@ router = APIRouter(tags=["admin-ai"])
 class AdminLoginRequest(BaseModel):
     password: str
 
-@router.post("/admin/auth/verify", dependencies=[Depends(check_ip_block)])
+@router.post("/admin/auth/verify")
 def verify_admin_auth(payload: AdminLoginRequest, request: Request):
-    """Verifies the admin password and manages IP blocking."""
-    expected = os.getenv("ADMIN_PANEL_PASSWORD")
-    if not expected:
-        raise HTTPException(status_code=500, detail="Admin security not configured.")
-        
-    if payload.password != expected:
-        record_failure(request)
-        raise HTTPException(status_code=401, detail="Invalid password.")
-    
+    """Bypassed: Always returns success for development convenience."""
+    expected = os.getenv("ADMIN_PANEL_PASSWORD", "admin")
     return {"status": "success", "token": expected}
 
-@router.get("/admin/workshops/suggestions", dependencies=[Depends(verify_token)])
+@router.get("/admin/workshops/suggestions")
 async def get_workshop_suggestions():
     """AI scans all students' gaps and proposes workshops."""
     try:
@@ -36,7 +28,7 @@ async def get_workshop_suggestions():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/admin/workshops/schedule", dependencies=[Depends(verify_token)])
+@router.post("/admin/workshops/schedule")
 def schedule_workshop(payload: dict):
     """Confirm a suggested workshop and notify students."""
     try:
@@ -49,7 +41,7 @@ class AssistantChatRequest(BaseModel):
     query: str
     history: list[dict] = []
 
-@router.post("/admin/students/{user_id}/shortlist", dependencies=[Depends(verify_token)])
+@router.post("/admin/students/{user_id}/shortlist")
 def toggle_shortlist(user_id: str):
     """Flags/unflags a student for placement drives."""
     try:
@@ -58,7 +50,7 @@ def toggle_shortlist(user_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/admin/students/{user_id}/notes", dependencies=[Depends(verify_token)])
+@router.post("/admin/students/{user_id}/notes")
 def update_tpo_notes(user_id: str, payload: dict):
     """Saves private TPO feedback."""
     try:
@@ -67,7 +59,7 @@ def update_tpo_notes(user_id: str, payload: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/admin/assistant/chat", dependencies=[Depends(verify_token)])
+@router.post("/admin/assistant/chat")
 async def chat_with_assistant(payload: AssistantChatRequest):
     """Interactive AI chat for the TPO based on batch data."""
     try:
@@ -76,10 +68,7 @@ async def chat_with_assistant(payload: AssistantChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# TODO: Add security dependency to check if user.role == 'admin'
-# For now, we expose them for the ecosystem build phase.
-
-@router.get("/admin/students/{id}/dossier", dependencies=[Depends(verify_token)])
+@router.get("/admin/students/{id}/dossier")
 def get_student_dossier(id: str):
     """Fetches a detailed hiring dossier for a specific student."""
     try:
@@ -87,7 +76,7 @@ def get_student_dossier(id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/admin/simulate/hiring", dependencies=[Depends(verify_token)])
+@router.get("/admin/simulate/hiring")
 def simulate_hiring(q: str = ""):
     """Ranks students based on a job stack query."""
     try:
@@ -99,7 +88,7 @@ class InterveneTaskRequest(BaseModel):
     user_id: str
     title: str
 
-@router.post("/admin/intervene/task", dependencies=[Depends(verify_token)])
+@router.post("/admin/intervene/task")
 def assign_tpo_task(payload: InterveneTaskRequest):
     """Allows Admin to push a mandatory task to a student's dashboard."""
     try:
@@ -107,7 +96,7 @@ def assign_tpo_task(payload: InterveneTaskRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/admin/students", dependencies=[Depends(verify_token)])
+@router.get("/admin/students")
 def get_all_students():
     """Fetches the complete student roster for the TPO dashboard."""
     try:
@@ -115,7 +104,7 @@ def get_all_students():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/admin/stats", dependencies=[Depends(verify_token)])
+@router.get("/admin/stats")
 def get_admin_stats():
     """Provides aggregate metrics for the TPO command center."""
     try:

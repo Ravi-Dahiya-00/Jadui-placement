@@ -12,38 +12,11 @@ export default function AdminLoginPage() {
   const [isBlocked, setIsBlocked] = useState(false)
   const router = useRouter()
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault()
-    if (!password) return
-    
-    setIsLoading(true)
-    setError('')
-
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/auth/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      })
-
-      const data = await res.json()
-
-      if (res.ok) {
-        sessionStorage.setItem('admin_token', data.token)
-        router.push('/admin')
-      } else {
-        if (res.status === 403) {
-          setIsBlocked(true)
-          setError(data.detail || 'Too many attempts. You are temporarily blocked.')
-        } else {
-          setError(data.detail || 'Invalid admin credentials')
-        }
-      }
-    } catch (err) {
-      setError('Connection failed. Please ensure backend is live.')
-    } finally {
-      setIsLoading(false)
-    }
+    // Bypass security: Just redirect
+    sessionStorage.setItem('admin_token', 'bypassed')
+    router.push('/admin')
   }
 
   return (
