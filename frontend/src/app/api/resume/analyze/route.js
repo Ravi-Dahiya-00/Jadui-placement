@@ -16,6 +16,8 @@ export async function POST(req) {
     const jdText = formData.get('jdText') || "General Software Engineering Role"; // Optional role hint
     const targetSkillsRaw = formData.get('targetSkills') || '';
 
+    const user_id = formData.get('user_id') || 'demo';
+
     if (!file) {
       return NextResponse.json(
         { error: 'At least one resume file is required' },
@@ -39,6 +41,7 @@ export async function POST(req) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        user_id,
         file_id: uploadData.file_id,
         role_target: jdText,
         target_skills: String(targetSkillsRaw)
