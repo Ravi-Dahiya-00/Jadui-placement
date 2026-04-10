@@ -1,6 +1,15 @@
 """Backend application entrypoint."""
 
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from modules.admin_ai.routes import router as admin_router
+from modules.github_profile.routes import router as github_profile_router
+from modules.github_review.routes import router as github_review_router
+from modules.interview_ai.routes import router as interview_router
+from modules.mentor_ai.routes import router as mentor_router
+from modules.resume_ai.routes import router as resume_router
+from modules.system_ai.routes import router as system_router
 
 app = FastAPI(title="Agentic AI Career Coach Backend")
 

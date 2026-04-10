@@ -9,7 +9,7 @@ from .workshops import workshop_service
 from .security import verify_token, check_ip_block, record_failure
 import os
 
-router = APIRouter(tags=["admin-ai"], dependencies=[Depends(verify_token)])
+router = APIRouter(tags=["admin-ai"])
 
 class AdminLoginRequest(BaseModel):
     password: str
@@ -27,7 +27,7 @@ def verify_admin_auth(payload: AdminLoginRequest, request: Request):
     
     return {"status": "success", "token": expected}
 
-@router.get("/admin/workshops/suggestions")
+@router.get("/admin/workshops/suggestions", dependencies=[Depends(verify_token)])
 async def get_workshop_suggestions():
     """AI scans all students' gaps and proposes workshops."""
     try:
@@ -36,7 +36,7 @@ async def get_workshop_suggestions():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/admin/workshops/schedule")
+@router.post("/admin/workshops/schedule", dependencies=[Depends(verify_token)])
 def schedule_workshop(payload: dict):
     """Confirm a suggested workshop and notify students."""
     try:
@@ -49,7 +49,7 @@ class AssistantChatRequest(BaseModel):
     query: str
     history: list[dict] = []
 
-@router.post("/admin/students/{user_id}/shortlist")
+@router.post("/admin/students/{user_id}/shortlist", dependencies=[Depends(verify_token)])
 def toggle_shortlist(user_id: str):
     """Flags/unflags a student for placement drives."""
     try:
@@ -58,7 +58,7 @@ def toggle_shortlist(user_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/admin/students/{user_id}/notes")
+@router.post("/admin/students/{user_id}/notes", dependencies=[Depends(verify_token)])
 def update_tpo_notes(user_id: str, payload: dict):
     """Saves private TPO feedback."""
     try:
@@ -67,7 +67,7 @@ def update_tpo_notes(user_id: str, payload: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/admin/assistant/chat")
+@router.post("/admin/assistant/chat", dependencies=[Depends(verify_token)])
 async def chat_with_assistant(payload: AssistantChatRequest):
     """Interactive AI chat for the TPO based on batch data."""
     try:
@@ -79,7 +79,7 @@ async def chat_with_assistant(payload: AssistantChatRequest):
 # TODO: Add security dependency to check if user.role == 'admin'
 # For now, we expose them for the ecosystem build phase.
 
-@router.get("/admin/students/{id}/dossier")
+@router.get("/admin/students/{id}/dossier", dependencies=[Depends(verify_token)])
 def get_student_dossier(id: str):
     """Fetches a detailed hiring dossier for a specific student."""
     try:
@@ -87,7 +87,7 @@ def get_student_dossier(id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/admin/simulate/hiring")
+@router.get("/admin/simulate/hiring", dependencies=[Depends(verify_token)])
 def simulate_hiring(q: str = ""):
     """Ranks students based on a job stack query."""
     try:
@@ -99,7 +99,7 @@ class InterveneTaskRequest(BaseModel):
     user_id: str
     title: str
 
-@router.post("/admin/intervene/task")
+@router.post("/admin/intervene/task", dependencies=[Depends(verify_token)])
 def assign_tpo_task(payload: InterveneTaskRequest):
     """Allows Admin to push a mandatory task to a student's dashboard."""
     try:
@@ -107,7 +107,7 @@ def assign_tpo_task(payload: InterveneTaskRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/admin/students")
+@router.get("/admin/students", dependencies=[Depends(verify_token)])
 def get_all_students():
     """Fetches the complete student roster for the TPO dashboard."""
     try:
@@ -115,7 +115,7 @@ def get_all_students():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/admin/stats")
+@router.get("/admin/stats", dependencies=[Depends(verify_token)])
 def get_admin_stats():
     """Provides aggregate metrics for the TPO command center."""
     try:
