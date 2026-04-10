@@ -7,30 +7,36 @@ from modules.system_ai.intelligence import intelligence_service
 
 class AdminService:
     def get_all_students(self) -> list[dict[str, Any]]:
-        """Fetches a list of all students and their key metrics, including TPO status."""
+        """Fetches a list of all students and their key metrics, including TPO status.
+        
+        NOTE: Deliberately avoids per-student radar calls to prevent N+1 DB hits.
+        avgScore is derived directly from the profiles table for performance.
+        """
         profiles_resp = (
             get_supabase_admin_client()
             .table("profiles")
-            .select("*")
+            .select("id, email, full_name, is_shortlisted, tpo_notes, created_at, resume_score")
             .eq("role", "student")
+            .order("created_at", desc=True)
             .execute()
         )
         profiles = profiles_resp.data or []
-        
-        # Get all system states in one go for task counting
+
+        # Get task counts in bulk (single query)
         states_resp = (
             get_supabase_admin_client()
             .table("user_system_state")
             .select("user_id, tasks")
             .execute()
         )
-        states = {s['user_id']: s['tasks'] for s in (states_resp.data or [])}
-        
+        states = {s['user_id']: (s.get('tasks') or []) for s in (states_resp.data or [])}
+
         enriched = []
         for p in profiles:
             uid = p['id']
-            radar = intelligence_service.get_readiness_radar(uid)
-            
+            # Use stored resume_score as the primary readiness signal (fast, no extra queries)
+            avg_score = int(p.get('resume_score') or 0)
+
             # Count pending TPO tasks
             tasks = states.get(uid, [])
             pending_tpo = len([t for t in tasks if t.get('source') == 'TPO' and not t.get('completed')])
@@ -39,8 +45,7 @@ class AdminService:
                 "id": uid,
                 "email": p['email'],
                 "name": p.get("full_name") or "Anonymous Student",
-                "radar": radar,
-                "avgScore": int(sum(radar.values()) / 4) if radar else 0,
+                "avgScore": avg_score,
                 "is_shortlisted": p.get("is_shortlisted", False),
                 "pending_tpo_tasks": pending_tpo,
                 "joined_at": p.get("created_at")

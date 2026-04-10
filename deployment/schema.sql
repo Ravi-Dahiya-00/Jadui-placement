@@ -10,6 +10,12 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     full_name TEXT,
     avatar_url TEXT,
     role TEXT DEFAULT 'student' CHECK (role IN ('student', 'admin')),
+    -- TPO / Admin fields
+    is_shortlisted BOOLEAN DEFAULT false,
+    tpo_notes TEXT,
+    resume_score INTEGER DEFAULT 0,
+    linkedin_url TEXT,
+    portfolio_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -133,3 +139,13 @@ CREATE INDEX IF NOT EXISTS idx_interview_answers_session ON public.interview_ans
 CREATE INDEX IF NOT EXISTS idx_workshops_status ON public.workshops(status);
 CREATE INDEX IF NOT EXISTS idx_github_reviews_user ON public.github_pr_reviews(user_id);
 CREATE INDEX IF NOT EXISTS idx_github_repo_analyses_user ON public.github_repo_analyses(user_id);
+
+-- ==========================================
+-- MIGRATION: Add missing columns to profiles
+-- Safe to run on existing databases
+-- ==========================================
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_shortlisted BOOLEAN DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS tpo_notes TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS resume_score INTEGER DEFAULT 0;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS linkedin_url TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS portfolio_url TEXT;
