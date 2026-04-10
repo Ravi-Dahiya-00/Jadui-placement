@@ -64,5 +64,5 @@ def get_resume_result(result_id: str) -> dict:
 
 
 @router.get("/resume/history")
-def get_resume_history(limit: int = 10) -> dict:
-    return {"history": service.get_history(limit=limit)}
+def get_resume_history(user_id: str | None = None, limit: int = 10) -> dict:
+    return {"history": service.get_history(user_id=user_id, limit=limit)}

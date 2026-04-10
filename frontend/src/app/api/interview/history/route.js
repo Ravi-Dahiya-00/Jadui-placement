@@ -9,7 +9,14 @@ export async function GET(req) {
 
     const { searchParams } = new URL(req.url);
     const limit = searchParams.get('limit') || '10';
-    const response = await fetch(`${backendUrl}/interview/history?limit=${encodeURIComponent(limit)}`, {
+    const userId = searchParams.get('user_id');
+
+    let fetchUrl = `${backendUrl}/api/interview/history?limit=${encodeURIComponent(limit)}`;
+    if (userId) {
+        fetchUrl += `&user_id=${encodeURIComponent(userId)}`;
+    }
+
+    const response = await fetch(fetchUrl, {
       method: 'GET',
       cache: 'no-store',
     });

@@ -11,7 +11,7 @@ export async function GET(req) {
     if (!userId) {
       return NextResponse.json({ error: 'user_id is required' }, { status: 400 });
     }
-    const response = await fetch(`${backendUrl}/system/state?user_id=${encodeURIComponent(userId)}`, {
+    const response = await fetch(`${backendUrl}/api/system/state?user_id=${encodeURIComponent(userId)}`, {
       method: 'GET',
       cache: 'no-store',
     });
@@ -35,7 +35,7 @@ export async function POST(req) {
       return NextResponse.json({ error: 'NEXT_PUBLIC_BACKEND_URL is not configured' }, { status: 500 });
     }
     const payload = await req.json();
-    const response = await fetch(`${backendUrl}/system/state`, {
+    const response = await fetch(`${backendUrl}/api/system/state`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

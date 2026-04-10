@@ -85,5 +85,5 @@ def interview_result(session_id: str, user_id: str = None) -> dict:
 
 
 @router.get("/interview/history")
-def interview_history(limit: int = 10) -> dict:
-    return {"history": service.get_history(limit=limit)}
+def interview_history(user_id: str | None = None, limit: int = 10) -> dict:
+    return {"history": service.get_history(user_id=user_id, limit=limit)}

@@ -52,9 +52,10 @@ export default function DashboardPage() {
     const loadStats = async () => {
       try {
         setLoadingStats(true)
+        const uid = state.user?.id || '';
         const [resumeRes, interviewRes] = await Promise.all([
-          fetch('/api/resume/history?limit=12', { cache: 'no-store' }),
-          fetch('/api/interview/history?limit=12', { cache: 'no-store' }),
+          fetch(`/api/resume/history?limit=12${uid ? `&user_id=${uid}` : ''}`, { cache: 'no-store' }),
+          fetch(`/api/interview/history?limit=12${uid ? `&user_id=${uid}` : ''}`, { cache: 'no-store' }),
         ])
         const resumeData = await resumeRes.json()
         const interviewData = await interviewRes.json()
