@@ -14,8 +14,15 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
+      // Standard Auth
       const token = localStorage.getItem('auth_token')
       if (token) config.headers.Authorization = `Bearer ${token}`
+
+      // Admin Security
+      if (config.url?.includes('/admin')) {
+        const adminToken = sessionStorage.getItem('admin_token')
+        if (adminToken) config.headers['X-Admin-Token'] = adminToken
+      }
     }
     return config
   },

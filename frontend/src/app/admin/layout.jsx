@@ -23,14 +23,23 @@ export default function AdminLayout({ children }) {
   const { state, dispatch } = useApp()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
-  // Security check
+  // Security check: Verify Admin Token
   useEffect(() => {
-    if (!state.isLoading && state.isAuthenticated) {
-       if (state.role !== 'admin') {
-          router.push('/dashboard')
-       }
+    const adminToken = sessionStorage.getItem('admin_token')
+    
+    // Allow the login page itself to load
+    if (pathname === '/admin/login') return
+
+    if (!adminToken) {
+      router.push('/admin/login')
+      return
     }
-  }, [state.user, state.role, state.isLoading, state.isAuthenticated])
+
+    // Role check (optional but good as a secondary layer if using Supabase roles)
+    if (!state.isLoading && state.isAuthenticated && state.role !== 'admin') {
+      router.push('/dashboard')
+    }
+  }, [state.user, state.role, state.isLoading, state.isAuthenticated, pathname])
 
   const handleLogout = async () => {
     await signOut()

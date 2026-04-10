@@ -1,13 +1,31 @@
 """Admin Routes: Exposing TPO analytics and student deep-dives."""
 
 from __future__ import annotations
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from .services import admin_service
 from .assistant import assistant_service
 from .workshops import workshop_service
+from .security import verify_token, check_ip_block, record_failure
+import os
 
-router = APIRouter(tags=["admin-ai"])
+router = APIRouter(tags=["admin-ai"], dependencies=[Depends(verify_token)])
+
+class AdminLoginRequest(BaseModel):
+    password: str
+
+@router.post("/admin/auth/verify", dependencies=[Depends(check_ip_block)])
+def verify_admin_auth(payload: AdminLoginRequest, request: Request):
+    """Verifies the admin password and manages IP blocking."""
+    expected = os.getenv("ADMIN_PANEL_PASSWORD")
+    if not expected:
+        raise HTTPException(status_code=500, detail="Admin security not configured.")
+        
+    if payload.password != expected:
+        record_failure(request)
+        raise HTTPException(status_code=401, detail="Invalid password.")
+    
+    return {"status": "success", "token": expected}
 
 @router.get("/admin/workshops/suggestions")
 async def get_workshop_suggestions():
