@@ -164,7 +164,7 @@ export default function StudentsPage() {
                                <div className={cn(
                                  "h-full rounded-full transition-all duration-1000",
                                  s.avgScore >= 75 ? "bg-emerald-500" : s.avgScore >= 50 ? "bg-amber-500" : "bg-rose-500"
-                               )} style={{ width: \`\${s.avgScore}%\` }} />
+                               )} style={{ width: `${s.avgScore}%` }} />
                             </div>
                          </div>
                       </td>
