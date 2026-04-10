@@ -37,31 +37,16 @@ export default function ResumeUpload({ onResult, onUploaded }) {
     setLoading(true)
     setError('')
     try {
-      // Step 1: Upload the file
+      // Hit the consolidated proxy which handles both upload and analyze
       const formData = new FormData()
       formData.append('file', file)
+      formData.append('user_id', userId)
+      if (roleTarget) formData.append('jdText', roleTarget)
+      if (targetSkills) formData.append('targetSkills', targetSkills)
       
-      const uploadRes = await fetch('/api/resume/upload', {
-        method: 'POST',
-        body: formData,
-      })
-      
-      const uploadData = await uploadRes.json()
-      if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed')
-      
-      const fileId = uploadData.file_id
-
-      // Step 2: Trigger Analysis with Connectivity Bridge
       const analyzeRes = await fetch('/api/resume/analyze', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: userId,
-          file_id: fileId,
-          role_target: roleTarget,
-          target_skills: targetSkills.split(',').map(s => s.trim()).filter(Boolean),
-          use_llm: true
-        }),
+        body: formData,
       })
 
       const analyzeData = await analyzeRes.json()
