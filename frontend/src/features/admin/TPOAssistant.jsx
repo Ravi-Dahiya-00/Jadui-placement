@@ -30,7 +30,8 @@ export default function TPOAssistant() {
     setLoading(true)
 
     try {
-      const res = await fetch('/api/admin/assistant/chat', {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const res = await fetch(`${backendUrl}/api/admin/assistant/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: userMsg, history: messages.slice(-5) })

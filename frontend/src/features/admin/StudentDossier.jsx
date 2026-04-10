@@ -14,8 +14,9 @@ export default function StudentDossier({ studentId, onClose }) {
 
   useEffect(() => {
     async function fetchDossier() {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
       try {
-        const res = await fetch(`/api/admin/students/${studentId}/dossier`)
+        const res = await fetch(`${backendUrl}/api/admin/students/${studentId}/dossier`)
         const data = await res.json()
         setDossier(data.dossier)
       } catch (err) {
@@ -37,8 +38,9 @@ export default function StudentDossier({ studentId, onClose }) {
   const { radar, latest_resume, top_prs, top_interviews, github_stats, profile, overall_tier } = dossier || {}
 
   const handleToggleShortlist = async () => {
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
     try {
-      const res = await fetch(`/api/admin/students/${studentId}/shortlist`, { method: 'POST' })
+      const res = await fetch(`${backendUrl}/api/admin/students/${studentId}/shortlist`, { method: 'POST' })
       if (res.ok) {
         const data = await res.json()
         setDossier(prev => ({ ...prev, profile: { ...prev.profile, is_shortlisted: data.is_shortlisted } }))
@@ -245,8 +247,9 @@ function TPONotes({ studentId, initialNotes }) {
 
   const handleSave = async () => {
     setIsSaving(true)
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
     try {
-      await fetch(`/api/admin/students/${studentId}/notes`, {
+      await fetch(`${backendUrl}/api/admin/students/${studentId}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notes })
@@ -301,8 +304,9 @@ function Intervention({ studentId }) {
   const handleAssign = async () => {
     if (!taskText) return
     setLoading(true)
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
     try {
-      const res = await fetch('/api/admin/intervene/task', {
+      const res = await fetch(`${backendUrl}/api/admin/intervene/task`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: studentId, title: taskText })
