@@ -45,6 +45,23 @@ export default function TPOAssistant() {
     }
   }
 
+  const formatMessageText = (text) => {
+    return text.split('\n').map((line, idx) => {
+      const parts = line.split(/(\*\*.*?\*\*)/g);
+      return (
+        <span key={idx}>
+          {parts.map((p, pIdx) => {
+            if (p.startsWith('**') && p.endsWith('**')) {
+              return <strong key={pIdx} className="text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]">{p.slice(2, -2)}</strong>;
+            }
+            return p;
+          })}
+          <br />
+        </span>
+      )
+    });
+  }
+
   return (
     <div className={cn(
       "fixed bottom-6 right-6 z-[100] transition-all duration-500 ease-[cubic-bezier(0.19,1,0.22,1)]",
@@ -93,7 +110,7 @@ export default function TPOAssistant() {
                       ? "bg-amber-500 text-neutral-950 rounded-tr-none shadow-lg shadow-amber-500/10" 
                       : "bg-neutral-800 text-neutral-200 rounded-tl-none border border-white/5"
                   )}>
-                    {m.text}
+                    <div className="space-y-1">{formatMessageText(m.text)}</div>
                   </div>
                </div>
              ))}

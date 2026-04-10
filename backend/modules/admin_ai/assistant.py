@@ -9,7 +9,7 @@ from .services import admin_service
 class TPOAssistantService:
     def _build_batch_context(self) -> str:
         """Serializes current batch data into a concise context for the AI."""
-        stats = admin_service.get_batch_stats()
+        stats = admin_service.get_dashboard_stats()
         students = admin_service.get_all_students()
         
         # Sort top performers
